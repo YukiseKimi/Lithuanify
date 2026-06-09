@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Iron Wolf of Vilnius">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="75%">
+      <stop offset="0%" stop-color="#454d57"/>
+      <stop offset="60%" stop-color="#2a2f37"/>
+      <stop offset="100%" stop-color="#15181c"/>
+    </radialGradient>
+    <linearGradient id="iron" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f2f5f8"/>
+      <stop offset="45%" stop-color="#c2cad4"/>
+      <stop offset="78%" stop-color="#8b95a2"/>
+      <stop offset="100%" stop-color="#5e6772"/>
+    </linearGradient>
+    <linearGradient id="ironDark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#9aa3ae"/>
+      <stop offset="100%" stop-color="#3c434c"/>
+    </linearGradient>
+    <linearGradient id="eye" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffe08a"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Badge -->
+  <rect x="6" y="6" width="500" height="500" rx="112" fill="url(#bg)" stroke="#0e1013" stroke-width="6"/>
+  <rect x="26" y="26" width="460" height="460" rx="96" fill="none" stroke="#5a636e" stroke-width="3" opacity="0.5"/>
+
+  <!-- Rivets -->
+  <g fill="#6b7480" opacity="0.7">
+    <circle cx="58" cy="58" r="6"/><circle cx="454" cy="58" r="6"/>
+    <circle cx="58" cy="454" r="6"/><circle cx="454" cy="454" r="6"/>
+    <circle cx="256" cy="44" r="5"/><circle cx="256" cy="468" r="5"/>
+    <circle cx="44" cy="256" r="5"/><circle cx="468" cy="256" r="5"/>
+  </g>
+
+  <!-- Wolf head -->
+  <g stroke="#11141a" stroke-width="5" stroke-linejoin="miter">
+    <!-- Head silhouette -->
+    <polygon fill="url(#iron)" points="108,300 140,232 96,120 190,196 256,168 322,196 416,120 372,232 404,300 330,372 256,416 182,372"/>
+    <!-- Forehead facet -->
+    <polygon fill="url(#ironDark)" stroke-width="3" points="190,196 256,168 322,196 290,252 256,240 222,252"/>
+    <!-- Muzzle -->
+    <polygon fill="url(#ironDark)" stroke-width="3" points="212,300 256,292 300,300 284,356 256,388 228,356"/>
+    <!-- Inner ears -->
+    <polygon fill="#262b32" stroke-width="2" points="112,150 168,198 134,214"/>
+    <polygon fill="#262b32" stroke-width="2" points="400,150 344,198 378,214"/>
+  </g>
+
+  <!-- Brow shadows -->
+  <g fill="#1c2127">
+    <polygon points="184,236 238,250 230,264 186,252"/>
+    <polygon points="328,236 274,250 282,264 326,252"/>
+  </g>
+
+  <!-- Eyes -->
+  <g stroke="#11141a" stroke-width="2">
+    <polygon fill="url(#eye)" points="188,252 232,262 214,286 184,274"/>
+    <polygon fill="url(#eye)" points="324,252 280,262 298,286 328,274"/>
+  </g>
+  <g fill="#fff6df" opacity="0.85">
+    <polygon points="196,260 210,263 202,272"/>
+    <polygon points="316,260 302,263 310,272"/>
+  </g>
+
+  <!-- Nose & snout -->
+  <g stroke="#11141a" stroke-width="3" stroke-linejoin="round">
+    <polygon fill="#14171c" points="236,346 276,346 256,372"/>
+  </g>
+  <line x1="256" y1="372" x2="256" y2="398" stroke="#11141a" stroke-width="4"/>
+</svg>
