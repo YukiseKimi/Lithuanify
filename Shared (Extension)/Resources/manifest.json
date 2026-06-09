@@ -21,7 +21,8 @@
 
     "content_scripts": [{
         "js": [ "content.js" ],
-        "matches": [ "*://example.com/*" ]
+        "matches": [ "<all_urls>" ],
+        "run_at": "document_idle"
     }],
 
     "action": {
@@ -29,5 +30,7 @@
         "default_icon": "images/toolbar-icon.svg"
     },
 
-    "permissions": [ ]
+    "permissions": [ "storage", "activeTab", "nativeMessaging" ],
+
+    "host_permissions": [ "https://translate.googleapis.com/*" ]
 }

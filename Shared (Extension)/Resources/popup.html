@@ -6,6 +6,23 @@
     <script type="module" src="popup.js"></script>
 </head>
 <body>
-    <strong>Hello World!</strong>
+    <h1>Lithuanify</h1>
+    <p class="subtitle">Lithuanian → English furigana</p>
+
+    <label class="toggle">
+        <input type="checkbox" id="toggle" checked>
+        <span class="track"><span class="thumb"></span></span>
+        <span id="state-label">On</span>
+    </label>
+
+    <label class="toggle cloud-row">
+        <input type="checkbox" id="smart" checked>
+        <span class="track"><span class="thumb"></span></span>
+        <span class="row-label">On-device AI</span>
+    </label>
+
+    <p id="model-status" class="status"></p>
+
+    <p class="hint">Translations appear in small letters above recognised Lithuanian words. On-device AI uses Apple Intelligence for context-aware meanings — private and free. When it's unavailable, a dictionary plus an online lookup are used.</p>
 </body>
 </html>

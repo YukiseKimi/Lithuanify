@@ -4,7 +4,7 @@
         "description": "The display name for the extension."
     },
     "extension_description": {
-        "message": "This is Lithuanify. You should tell us what your extension does here.",
+        "message": "Shows English translations in small letters above Lithuanian words, like furigana.",
         "description": "Description of what the extension does."
     }
 }
