@@ -24,7 +24,7 @@ browser.runtime.sendMessage({ command: "modelStatus" }).then((res) => {
         modelStatus.textContent = "On-device AI: available";
         modelStatus.classList.add("ok");
     } else {
-        modelStatus.textContent = "On-device AI unavailable — using dictionary + online";
+        modelStatus.textContent = "On-device AI unavailable — using the offline dictionary";
         modelStatus.classList.add("warn");
     }
 }).catch(() => { /* leave blank */ });

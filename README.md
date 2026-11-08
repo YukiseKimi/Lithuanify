@@ -18,18 +18,19 @@ word keeps its original form while a concise English gloss sits on top.
 
 ## How translation works
 
-Lithuanify is **hybrid**, and prefers to run entirely on your device:
+Lithuanify runs **entirely on your device**, in two tiers:
 
-1. **On-device AI (primary).** Apple's [FoundationModels](https://developer.apple.com/documentation/foundationmodels)
-   framework (Apple Intelligence) produces *context-aware* per-word glosses, so a
-   word gets the meaning that fits the sentence rather than a generic dictionary
-   entry. This is free, private, and offline. Requires Apple Intelligence to be
-   enabled on a supported device.
-2. **Offline dictionary.** A built-in list of common Lithuanian words handles
-   frequent vocabulary instantly.
-3. **Online word lookup (fallback).** For words the model isn't available for or
-   skips, a free translation endpoint fills the gap. Results are cached so each
-   word is fetched at most once.
+1. **Offline dictionary (instant).** A built-in list of common Lithuanian words
+   is rendered in the first frame, before any model work starts.
+2. **On-device AI (fills the gaps).** Words the dictionary doesn't know are sent,
+   batched by what's on screen, to Apple's [FoundationModels](https://developer.apple.com/documentation/foundationmodels)
+   framework (Apple Intelligence), which returns a *context-aware* meaning for
+   each one. The model only returns a number and a meaning per word, so its
+   output stays short. Requires Apple Intelligence on a supported device.
+
+Nothing is sent to the network. Model results are cached per text block in
+IndexedDB, so revisited pages don't touch the model again. Pages that don't
+look Lithuanian are left alone.
 
 > Note: Apple's *Translation* framework can't be used here — it only vends a
 > session from a SwiftUI view, and a web extension's native handler is headless.
@@ -42,9 +43,10 @@ Lithuanify is **hybrid**, and prefers to run entirely on your device:
 - **Priority + visible-first scheduling:** on-screen text translates first, then
   the rest fills in by priority (title → body → navigation/menus last).
 - **Foreground-only:** only the active tab spends the model; background tabs pause.
-- **Performance:** model prewarming and a persistent gloss cache for fast
-  revisits.
-- Diacritic-insensitive matching and gap-fill so words aren't left untranslated.
+- **Performance:** dictionary glosses render instantly; a prewarmed model
+  session is reused per request; a persistent IndexedDB gloss cache makes
+  revisits instant. Timings are logged to the Web Inspector console.
+- Diacritic-insensitive dictionary matching.
 - Toolbar popup to toggle the extension and the on-device AI on/off, and to see
   whether the on-device model is available.
 
@@ -53,7 +55,7 @@ Lithuanify is **hybrid**, and prefers to run entirely on your device:
 | Path | Purpose |
 |------|---------|
 | `Shared (Extension)/Resources/content.js` | Page scanning, furigana rendering, scheduling, dictionary |
-| `Shared (Extension)/Resources/background.js` | Bridges JS ↔ native, caching, online fallback |
+| `Shared (Extension)/Resources/background.js` | Bridges JS ↔ native, gloss cache (IndexedDB) |
 | `Shared (Extension)/Resources/popup.*` | Toolbar popup UI |
 | `Shared (Extension)/SafariWebExtensionHandler.swift` | Native handler running on-device translation |
 | `Shared (App)/` | Container app that hosts and enables the extension |
@@ -74,8 +76,7 @@ Lithuanify is **hybrid**, and prefers to run entirely on your device:
 
 - Xcode and a recent macOS/iOS (Safari Web Extensions, Manifest V3).
 - For the on-device AI path: a device with **Apple Intelligence** enabled.
-  Without it, Lithuanify automatically falls back to the dictionary + online
-  lookup.
+  Without it, Lithuanify uses the offline dictionary only.
 
 ## License
 
