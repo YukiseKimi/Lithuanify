@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Iron Wolf">
+  <defs>
+    <linearGradient id="t-iron" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e9edf2"/>
+      <stop offset="100%" stop-color="#6c7682"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(0,16) scale(1.04) translate(-10,0)">
+    <g stroke="#11141a" stroke-width="6" stroke-linejoin="miter">
+      <polygon fill="url(#t-iron)" points="108,300 140,232 96,120 190,196 256,168 322,196 416,120 372,232 404,300 330,372 256,416 182,372"/>
+      <polygon fill="#2a2f37" stroke-width="3" points="190,196 256,168 322,196 290,252 256,240 222,252"/>
+      <polygon fill="#2a2f37" stroke-width="3" points="212,300 256,292 300,300 284,356 256,388 228,356"/>
+      <polygon fill="#1c2127" stroke-width="2" points="112,150 168,198 134,214"/>
+      <polygon fill="#1c2127" stroke-width="2" points="400,150 344,198 378,214"/>
+    </g>
+    <g fill="#ffb020" stroke="#11141a" stroke-width="2">
+      <polygon points="188,252 232,262 214,286 184,274"/>
+      <polygon points="324,252 280,262 298,286 328,274"/>
+    </g>
+    <polygon fill="#14171c" stroke="#11141a" stroke-width="3" stroke-linejoin="round" points="236,346 276,346 256,372"/>
+    <line x1="256" y1="372" x2="256" y2="398" stroke="#11141a" stroke-width="4"/>
+  </g>
+</svg>
