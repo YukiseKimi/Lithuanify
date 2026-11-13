@@ -1,12 +1,31 @@
 import Foundation
+import FoundationModels
+
+public struct WordHint: Sendable, Equatable {
+    public let lemma: String?
+    public let options: [String]
+
+    public init(lemma: String?, options: [String]) {
+        self.lemma = lemma
+        self.options = options
+    }
+
+    init?(message: Any?) {
+        guard let item = message as? [String: Any],
+              let options = item["options"] as? [String], !options.isEmpty else { return nil }
+        self.init(lemma: item["lemma"] as? String, options: options)
+    }
+}
 
 public struct GlossBlock: Sendable, Equatable {
     public let text: String
     public let words: [String]
+    public let hints: [WordHint?]
 
-    public init(text: String, words: [String]) {
+    public init(text: String, words: [String], hints: [WordHint?] = []) {
         self.text = text
         self.words = words
+        self.hints = words.indices.map { hints.indices.contains($0) ? hints[$0] : nil }
     }
 
     public static func list(from message: Any?) -> [GlossBlock] {
@@ -15,20 +34,33 @@ public struct GlossBlock: Sendable, Equatable {
             let item = entry as? [String: Any]
             return GlossBlock(
                 text: item?["text"] as? String ?? "",
-                words: item?["words"] as? [String] ?? []
+                words: item?["words"] as? [String] ?? [],
+                hints: (item?["hints"] as? [Any] ?? []).map(WordHint.init(message:))
             )
         }
     }
 }
 
-public struct WordGloss: Sendable, Equatable {
-    public let i: Int
-    public let g: String
+@Generable
+public struct WordAnswer: Sendable, Equatable {
+    @Guide(description: "The number of the word in the list")
+    public var word: Int
+    @Guide(description: "The number of the option that fits, or 0 when the word has no options or none fits")
+    public var option: Int
+    @Guide(description: "A short English meaning of the word as used in the text, 1 to 3 words")
+    public var meaning: String
 
-    public init(i: Int, g: String) {
-        self.i = i
-        self.g = g
+    public init(word: Int, option: Int, meaning: String) {
+        self.word = word
+        self.option = option
+        self.meaning = meaning
     }
+}
+
+@Generable
+public struct GlossAnswer: Sendable {
+    @Guide(description: "One answer for each numbered word")
+    public var words: [WordAnswer]
 }
 
 public enum GlossCore {
@@ -37,10 +69,8 @@ public enum GlossCore {
     You help an English speaker read Lithuanian. The user gives a Lithuanian \
     text and a numbered list of words from it. For each numbered word, give a \
     short English meaning (1-3 words) that fits how the word is used in the \
-    text. Reply with one line per word: its number, a period, and the \
-    meaning. Never repeat the Lithuanian word. Example:
-    1. house
-    2. went
+    text. When a word lists options, give the number of the option that fits \
+    the text; give 0 when none fits. Never repeat the Lithuanian word.
     """
 
     public static let maxWordsPerJob = 20
@@ -51,6 +81,7 @@ public enum GlossCore {
         public let block: Int
         public let word: Int
         public let text: String
+        public var hint: WordHint? = nil
     }
 
     public struct Job: Sendable, Equatable {
@@ -62,37 +93,29 @@ public enum GlossCore {
     public static func prompt(for job: Job) -> String {
         var prompt = "Text:\n\(job.context.joined(separator: " "))\n\nWords:\n"
         for (n, target) in job.targets.enumerated() {
-            prompt += "\(n + 1). \(target.text)\n"
+            prompt += "\(n + 1). \(target.text)"
+            if let hint = target.hint {
+                if let lemma = hint.lemma, lemma != target.text { prompt += " (form of \(lemma))" }
+                let options = hint.options.enumerated().map { "\($0 + 1)) \($1)" }.joined(separator: " ")
+                prompt += "; options: \(options)"
+            }
+            prompt += "\n"
         }
         return prompt
     }
 
-    public static func apply(_ items: [WordGloss], of job: Job, to results: inout [[String]]) {
-        for item in items {
-            let index = item.i - 1
+    public static func apply(_ answers: [WordAnswer], of job: Job, to results: inout [[String]]) {
+        for answer in answers {
+            let index = answer.word - 1
             guard job.targets.indices.contains(index) else { continue }
             let target = job.targets[index]
-            let meaning = clean(item.g, word: target.text)
+            let options = target.hint?.options ?? []
+            let meaning = options.indices.contains(answer.option - 1)
+                ? options[answer.option - 1]
+                : clean(answer.meaning, word: target.text)
             guard !meaning.isEmpty else { continue }
             results[target.block][target.word] = meaning
         }
-    }
-
-    public static func parse(_ text: String) -> [WordGloss] {
-        var out: [WordGloss] = []
-        for line in text.split(whereSeparator: \.isNewline) {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            let digits = trimmed.prefix(while: { $0.isNumber })
-            guard let i = Int(digits) else { continue }
-            var rest = trimmed.dropFirst(digits.count).drop(while: { ".):-= \t".contains($0) })
-            if let sep = rest.range(of: " - ") ?? rest.range(of: " = ") ?? rest.range(of: ": ") {
-                rest = rest[sep.upperBound...]
-            }
-            var gloss = rest.trimmingCharacters(in: .whitespaces)
-            while let last = gloss.last, ".,;".contains(last) { gloss.removeLast() }
-            if !gloss.isEmpty { out.append(WordGloss(i: i, g: gloss)) }
-        }
-        return out
     }
 
     public static func clean(_ gloss: String, word: String) -> String {
@@ -152,12 +175,12 @@ public enum GlossCore {
                 var targets: [Target] = []
                 for token in tokens {
                     if let w = remaining.removeValue(forKey: token) {
-                        targets.append(Target(block: b, word: w, text: block.words[w]))
+                        targets.append(Target(block: b, word: w, text: block.words[w], hint: block.hints[w]))
                     }
                 }
                 if s == sentences.count - 1 {
                     for (word, w) in remaining.sorted(by: { $0.value < $1.value }) {
-                        targets.append(Target(block: b, word: w, text: word))
+                        targets.append(Target(block: b, word: w, text: word, hint: block.hints[w]))
                     }
                     remaining.removeAll()
                 }

@@ -130,14 +130,15 @@ enum Glosser {
         return (results, ok)
     }
 
-    private static func run(_ job: GlossCore.Job, on session: LanguageModelSession) async -> [WordGloss]? {
+    private static func run(_ job: GlossCore.Job, on session: LanguageModelSession) async -> [WordAnswer]? {
         do {
             let response = try await session.respond(
                 to: GlossCore.prompt(for: job),
+                generating: GlossAnswer.self,
                 options: GenerationOptions(samplingMode: .greedy)
             )
-            logger.debug("Model answer: \(response.content, privacy: .private)")
-            return GlossCore.parse(response.content)
+            logger.debug("Model answer: \(String(describing: response.content.words), privacy: .private)")
+            return response.content.words
         } catch {
             logger.error("Gloss failed: \(String(describing: error), privacy: .private)")
             return nil

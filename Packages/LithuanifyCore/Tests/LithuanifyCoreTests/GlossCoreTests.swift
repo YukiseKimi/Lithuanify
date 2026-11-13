@@ -1,3 +1,4 @@
+import Foundation
 import LithuanifyCore
 import Testing
 
@@ -25,31 +26,22 @@ struct CleanTests {
     }
 }
 
-struct ParseTests {
-    @Test(arguments: [
-        ("1. house", [WordGloss(i: 1, g: "house")]),
-        ("2) went.", [WordGloss(i: 2, g: "went")]),
-        ("3: gatvės - street", [WordGloss(i: 3, g: "street")]),
-        ("Here are the meanings:\n1. fire\n\n2. smoke;", [WordGloss(i: 1, g: "fire"), WordGloss(i: 2, g: "smoke")]),
-        ("4.", []),
-    ])
-    func parseReadsEachAnswerLine(answer: String, expected: [WordGloss]) {
-        #expect(GlossCore.parse(answer) == expected)
-    }
-}
-
 struct BlockListTests {
     @Test func malformedEntriesKeepTheirPlace() {
         let message: [Any] = [
             ["text": "Bad block without words"],
             "not a block",
             ["text": "Aš skaitau knygą.", "words": ["skaitau"]],
+            ["text": "Kasa uždaryta.", "words": ["kasa", "uždaryta"],
+             "hints": [["lemma": "kasa", "options": ["cash register", "braid"]], NSNull()]],
         ]
         let blocks = GlossBlock.list(from: message)
         #expect(blocks == [
             GlossBlock(text: "Bad block without words", words: []),
             GlossBlock(text: "", words: []),
             GlossBlock(text: "Aš skaitau knygą.", words: ["skaitau"]),
+            GlossBlock(text: "Kasa uždaryta.", words: ["kasa", "uždaryta"],
+                       hints: [WordHint(lemma: "kasa", options: ["cash register", "braid"]), nil]),
         ])
     }
 
@@ -93,6 +85,22 @@ struct JobTests {
         ]).first)
         #expect(GlossCore.prompt(for: job) == "Text:\nAš skaitau knygą.\n\nWords:\n1. skaitau\n2. knygą\n")
     }
+
+    @Test func promptListsTheLemmaAndOptionsOfAWordToPick() throws {
+        let job = try #require(GlossCore.makeJobs([
+            GlossBlock(text: "Kasos uždarytos.", words: ["kasos", "uždarytos"],
+                       hints: [WordHint(lemma: "kasa", options: ["braid", "cash register"]), nil])
+        ]).first)
+        #expect(GlossCore.prompt(for: job) == """
+        Text:
+        Kasos uždarytos.
+
+        Words:
+        1. kasos (form of kasa); options: 1) braid 2) cash register
+        2. uždarytos
+
+        """)
+    }
 }
 
 struct ApplyTests {
@@ -104,11 +112,25 @@ struct ApplyTests {
         let job = try #require(GlossCore.makeJobs(blocks).first)
         var results = blocks.map { Array(repeating: "", count: $0.words.count) }
         GlossCore.apply([
-            WordGloss(i: 1, g: "day. Friday"),
-            WordGloss(i: 2, g: "morning"),
-            WordGloss(i: 0, g: "ignored"),
-            WordGloss(i: 9, g: "ignored"),
+            WordAnswer(word: 1, option: 0, meaning: "day. Friday"),
+            WordAnswer(word: 2, option: 0, meaning: "morning"),
+            WordAnswer(word: 0, option: 0, meaning: "ignored"),
+            WordAnswer(word: 9, option: 0, meaning: "ignored"),
         ], of: job, to: &results)
         #expect(results == [[], ["Friday", "morning"]])
+    }
+
+    @Test(arguments: [
+        (2, "money desk", "cash register"),
+        (0, "plait", "plait"),
+        (7, "plait", "plait"),
+    ])
+    func aPickTakesItsOptionAndOtherwiseTheWrittenMeaning(option: Int, meaning: String, expected: String) throws {
+        let blocks = [GlossBlock(text: "Kasa uždaryta.", words: ["kasa"],
+                                 hints: [WordHint(lemma: "kasa", options: ["braid", "cash register"])])]
+        let job = try #require(GlossCore.makeJobs(blocks).first)
+        var results = [[""]]
+        GlossCore.apply([WordAnswer(word: 1, option: option, meaning: meaning)], of: job, to: &results)
+        #expect(results == [[expected]])
     }
 }
