@@ -112,6 +112,7 @@ test('a word whose lookup failed is asked again with the next batch', async () =
   await waitFor(() => page.glosses().some(([word, gloss]) => word === 'knygą' && gloss === 'book'))
   assert.ok(page.lookups.length >= 2)
   assert.ok(page.lookups[1].includes('knygą'))
+  await page.settle()
 })
 
 test('a batch whose lookup failed waits and asks again before it renders', async () => {
