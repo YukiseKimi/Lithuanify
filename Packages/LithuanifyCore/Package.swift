@@ -1,9 +1,9 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
     name: "LithuanifyCore",
-    platforms: [.iOS(.v15), .macOS(.v12)],
+    platforms: [.iOS(.v26), .macOS(.v26)],
     products: [.library(name: "LithuanifyCore", targets: ["LithuanifyCore"])],
     targets: [
         .target(name: "LithuanifyCore"),

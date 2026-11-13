@@ -5,16 +5,13 @@
 //  Created by yukisekimi on 2026-06-09.
 //
 
+import FoundationModels
 import LithuanifyCore
 import SafariServices
 import Synchronization
 import os
 
 private let logger = Logger(subsystem: "mannychau.Lithuanify.Extension", category: "gloss")
-
-#if canImport(FoundationModels)
-import FoundationModels
-#endif
 
 class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
 
@@ -31,7 +28,7 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         switch command {
         case "modelStatus":
             Self.prewarm()
-            complete(context, with: ["available": Self.modelIsAvailable()])
+            complete(context, with: ["available": AIStatus.current == .ready])
 
         case "gloss":
             handleGloss(blocks: GlossBlock.list(from: dict["blocks"]), context: context)
@@ -51,43 +48,25 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
 
     // MARK: - On-device model
 
-    private static func modelIsAvailable() -> Bool {
-        #if canImport(FoundationModels)
-        if #available(iOS 26.0, macOS 26.0, *) {
-            return SystemLanguageModel.default.isAvailable
-        }
-        #endif
-        return false
-    }
-
     /// Load the model ahead of the first real request and park a warm session.
     static func prewarm() {
-        #if canImport(FoundationModels)
-        if #available(iOS 26.0, macOS 26.0, *) {
-            SessionPool.shared.fillIfEmpty()
-        }
-        #endif
+        SessionPool.shared.fillIfEmpty()
     }
 
     private func handleGloss(blocks: [GlossBlock], context: NSExtensionContext) {
-        #if canImport(FoundationModels)
-        if #available(iOS 26.0, macOS 26.0, *), SystemLanguageModel.default.isAvailable {
-            Task {
-                let (results, ok) = await Glosser.gloss(blocks)
-                self.complete(context, with: ["available": true, "results": results, "ok": ok])
-            }
+        guard SystemLanguageModel.default.isAvailable else {
+            complete(context, with: ["available": false, "results": []])
             return
         }
-        #endif
-        complete(context, with: ["available": false, "results": []])
+        Task {
+            let (results, ok) = await Glosser.gloss(blocks)
+            self.complete(context, with: ["available": true, "results": results, "ok": ok])
+        }
     }
 }
 
-#if canImport(FoundationModels)
-
 /// Holds one prewarmed session. Each request takes it (so two requests never
 /// share a session) and a fresh warm one is parked for the next request.
-@available(iOS 26.0, macOS 26.0, *)
 final class SessionPool: Sendable {
     static let shared = SessionPool()
 
@@ -115,7 +94,6 @@ final class SessionPool: Sendable {
     }
 }
 
-@available(iOS 26.0, macOS 26.0, *)
 enum Glosser {
 
     static let maxTurnsPerSession = 4
@@ -166,4 +144,3 @@ enum Glosser {
         }
     }
 }
-#endif
