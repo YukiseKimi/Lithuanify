@@ -470,16 +470,16 @@ async function pumpRender() {
     }
 }
 
-// Take the next batch for the model: from the front of the queue, staying
-// within the size limits. A visible batch holds only visible blocks.
+// Take the next batch for the model: visible blocks from the front of the
+// queue, staying within the size limits. Blocks off screen wait for the
+// viewport observer.
 function takeRefineBatch() {
     const batch = [];
     let blocks = 0;
     let words = 0;
-    const visibleOnly = refineQueue[0].visible;
     while (refineQueue.length) {
         const item = refineQueue[0];
-        if (visibleOnly && !item.visible) break;
+        if (!item.visible) break;
         const n = item.records.length;
         const w = item.records.reduce((sum, r) => sum + r.unknown.length, 0);
         if (batch.length && (blocks + n > REFINE_MAX_BLOCKS || words + w > REFINE_MAX_WORDS)) break;
@@ -526,6 +526,7 @@ async function pumpRefine() {
         while (enabled && isVisible() && aiActive() && refineQueue.length) {
             sortQueue(refineQueue);
             const batch = takeRefineBatch();
+            if (!batch.length) break;
             const records = batch.flatMap((item) => item.records);
             const blocks = records.map((r) => (r.hints
                 ? { text: r.context, words: r.unknown, hints: r.hints }

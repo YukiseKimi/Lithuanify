@@ -188,3 +188,14 @@ test('a paused reply keeps the dictionary meanings and asks again after the paus
   await waitFor(() => page.glosses().length === 3)
   assert.equal(calls, 3)
 })
+
+test('a paragraph far below the screen gets dictionary meanings but waits for the model until it scrolls into view', async () => {
+  const page = await loadContent(lt('<p id="top">Aš skaitau.</p><p id="far">Aš rašau knygą.</p>'), { offscreen: '#far' })
+  await page.settle()
+  assert.deepEqual(page.sent.flat().map((b) => b.text), ['Aš skaitau.'])
+  assert.deepEqual(page.glosses(), [['Aš', 'I'], ['skaitau', 'G:skaitau'], ['Aš', 'I'], ['knygą', 'book']])
+
+  page.scrollTo('#far')
+  await waitFor(() => page.glosses().length === 5)
+  assert.deepEqual(page.sent.flat().map((b) => b.text), ['Aš skaitau.', 'Aš rašau knygą.'])
+})

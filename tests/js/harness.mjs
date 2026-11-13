@@ -29,7 +29,7 @@ export async function waitFor(check, { timeout = 3000, every = 10 } = {}) {
 
 const sampleDictionary = { aš: 'I', knygą: 'book', knygoje: 'book' }
 
-export async function loadContent(html, { mode = 'page', modelAvailable = true, gloss = glossAll, dictionary = sampleDictionary, lookupFailures = 0, reply = null } = {}) {
+export async function loadContent(html, { mode = 'page', modelAvailable = true, gloss = glossAll, dictionary = sampleDictionary, lookupFailures = 0, reply = null, offscreen = null } = {}) {
   const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true })
   const { window } = dom
   open.add(window)
@@ -37,10 +37,29 @@ export async function loadContent(html, { mode = 'page', modelAvailable = true, 
   const lookups = []
   let glossCalls = 0
 
+  const observers = new Set()
   window.IntersectionObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
+    constructor(callback) {
+      this.callback = callback
+      this.targets = new Set()
+      observers.add(this)
+    }
+    observe(el) {
+      this.targets.add(el)
+      if (offscreen && el.matches(offscreen)) return
+      if (!this.pending) {
+        this.pending = new Set()
+        setTimeout(() => {
+          const entries = [...this.pending].filter((t) => this.targets.has(t))
+            .map((target) => ({ isIntersecting: true, target }))
+          this.pending = null
+          if (entries.length) this.callback(entries)
+        }, 0)
+      }
+      this.pending.add(el)
+    }
+    unobserve(el) { this.targets.delete(el) }
+    disconnect() { this.targets.clear(); observers.delete(this) }
   }
   window.browser = {
     storage: { local: { get: async () => ({ mode }), set: async () => {} } },
@@ -75,8 +94,14 @@ export async function loadContent(html, { mode = 'page', modelAvailable = true, 
     sent,
     lookups,
     glossCalls: () => glossCalls,
+    scrollTo: (selector) => {
+      const el = window.document.querySelector(selector)
+      for (const observer of observers) {
+        if (observer.targets.has(el)) observer.callback([{ isIntersecting: true, target: el }])
+      }
+    },
     state: (expression) => window.eval(expression),
-    idle: () => window.eval('!rendering && !refining && renderQueue.length === 0 && refineQueue.length === 0 && (typeof retryTimers === "undefined" || retryTimers.size === 0) && (typeof pauseTimer === "undefined" || pauseTimer === null)'),
+    idle: () => window.eval('!rendering && !refining && renderQueue.length === 0 && refineQueue.every((item) => !item.visible) && (typeof retryTimers === "undefined" || retryTimers.size === 0) && (typeof pauseTimer === "undefined" || pauseTimer === null)'),
     settle: async () => {
       await waitFor(() => window.eval('typeof enabled') === 'boolean')
       await new Promise((resolve) => setTimeout(resolve, 20))
