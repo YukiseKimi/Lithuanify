@@ -101,7 +101,7 @@ test('the memory cache stays bounded when site storage is blocked', async () => 
 
   assert.equal(bg.state('memCache.size'), 5000)
   assert.equal(bg.state('dirty.size'), 5000)
-  assert.equal(bg.state('memCache.has(keyOf({ text: "Sakinys 0.", words: ["sakinys"] }))'), false)
+  assert.equal(bg.state('memCache.has(keyOf("Sakinys 0.", "sakinys"))'), false)
 })
 
 test('a save on a closed cache connection keeps its entries for the next save', async () => {
@@ -217,4 +217,20 @@ test('answers cached before the model could pick are not reused', async () => {
   const bg = load({ native: reply })
   const result = await bg.gloss([{ text: 'Kasa uždaryta.', words: ['kasa'] }])
   assert.deepEqual(result.results, [{ kasa: 'G:kasa' }])
+})
+
+test('a paragraph that gains a sentence asks the model only for the new sentence', async () => {
+  const bg = load({ native: reply })
+  await bg.gloss([{ text: 'Aš skaitau.', words: ['skaitau'] }])
+  const result = await bg.gloss([{ text: 'Aš skaitau. Karas tęsiasi.', words: ['skaitau', 'karas'] }])
+  assert.deepEqual(result.results, [{ skaitau: 'G:skaitau', karas: 'G:karas' }])
+  assert.deepEqual(bg.nativeCalls[1].blocks, [{ text: 'Aš skaitau. Karas tęsiasi.', words: ['karas'] }])
+})
+
+test('the same sentence in another paragraph comes from the cache', async () => {
+  const bg = load({ native: reply })
+  await bg.gloss([{ text: 'Labas. Aš skaitau.', words: ['skaitau'] }])
+  const result = await bg.gloss([{ text: 'Aš skaitau. Viso gero.', words: ['skaitau'] }])
+  assert.deepEqual(result.results, [{ skaitau: 'G:skaitau' }])
+  assert.equal(bg.nativeCalls.length, 1)
 })

@@ -30,7 +30,7 @@ async function checkModel() {
 // --- Gloss cache (IndexedDB) ------------------------------------------------
 
 const DB_NAME = "lithuanify";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 const STORE = "glosses";
 const CACHE_MAX = 5000;
 
@@ -174,31 +174,45 @@ browser.storage.local.remove(["glossCache", "translationCache"]).catch(() => {})
 
 // --- Gloss requests ---------------------------------------------------------
 
-// blocks: [{ text, words: [lowercased unknown words] }]
-const keyOf = (b) => b.text + "\u0001" + b.words.join(" ");
+// blocks: [{ text, words: [lowercased unknown words], hints? }]
+// Answers are cached per word and the sentence it is in.
+const SENTENCE_RE = /[^.!?;\n]+[.!?;\n]*/g;
+const keyOf = (sentence, word) => sentence + "\u0001" + word;
+
+function sentenceOf(text, word) {
+    const lower = word.toLowerCase();
+    const sentences = text.match(SENTENCE_RE) || [text];
+    const found = sentences.find((sentence) =>
+        (sentence.toLowerCase().match(/\p{L}+/gu) || []).includes(lower));
+    return (found || text).trim();
+}
 
 async function handleGloss(blocks) {
     const valid = blocks.filter((b) =>
         b && typeof b.text === "string" && Array.isArray(b.words) && b.words.length);
-    const cached = await cacheGetMany([...new Set(valid.map(keyOf))]);
+    const keysOf = new Map(valid.map((b) => [b, b.words.map((w) => keyOf(sentenceOf(b.text, w), w))]));
+    const cached = await cacheGetMany([...new Set([...keysOf.values()].flat())]);
 
-    // Unique uncached blocks to send to the model.
     const need = new Map();
     for (const b of valid) {
-        const key = keyOf(b);
-        if (!cached.has(key) && !need.has(key)) need.set(key, b);
+        const missing = b.words.map((_, i) => i).filter((i) => !cached.has(keysOf.get(b)[i]));
+        if (!missing.length) continue;
+        const request = { text: b.text, words: missing.map((i) => b.words[i]) };
+        if (Array.isArray(b.hints)) request.hints = missing.map((i) => b.hints[i] || null);
+        const signature = JSON.stringify(request);
+        const entry = need.get(signature) || { request, keys: missing.map((i) => keysOf.get(b)[i]), blocks: [] };
+        entry.blocks.push(b);
+        need.set(signature, entry);
     }
 
     const failed = new Set();
     if (need.size) {
-        const sent = [...need.values()].map((b) => (Array.isArray(b.hints)
-            ? { text: b.text, words: b.words, hints: b.hints }
-            : { text: b.text, words: b.words }));
+        const entries = [...need.values()];
         let resp = null;
         try {
             resp = await browser.runtime.sendNativeMessage(NATIVE_APP_ID, {
                 command: "gloss",
-                blocks: sent
+                blocks: entries.map((e) => e.request)
             });
         } catch (e) {
             resp = null;
@@ -211,31 +225,31 @@ async function handleGloss(blocks) {
         }
         if (resp && Array.isArray(resp.results)) {
             const ok = Array.isArray(resp.ok) ? resp.ok : [];
-            sent.forEach((b, i) => {
+            entries.forEach((e, i) => {
                 if (ok[i] === false) {
-                    failed.add(keyOf(b));
+                    e.blocks.forEach((b) => failed.add(b));
                     return;
                 }
                 const glosses = Array.isArray(resp.results[i]) ? resp.results[i] : [];
-                const value = {};
-                b.words.forEach((w, j) => {
-                    value[w] = typeof glosses[j] === "string" ? glosses[j] : "";
+                e.keys.forEach((key, j) => {
+                    const value = typeof glosses[j] === "string" ? glosses[j] : "";
+                    cachePut(key, value);
+                    cached.set(key, value);
                 });
-                cachePut(keyOf(b), value);
-                cached.set(keyOf(b), value);
             });
             flushCache();
         } else {
-            for (const b of sent) failed.add(keyOf(b));
+            entries.forEach((e) => e.blocks.forEach((b) => failed.add(b)));
         }
     }
 
     return {
         available: true,
         results: blocks.map((b) => {
-            if (!b || !Array.isArray(b.words)) return {};
-            if (failed.has(keyOf(b))) return null;
-            return cached.get(keyOf(b)) || {};
+            if (!keysOf.has(b)) return {};
+            if (failed.has(b)) return null;
+            const keys = keysOf.get(b);
+            return Object.fromEntries(b.words.map((w, i) => [w, cached.get(keys[i]) ?? ""]));
         })
     };
 }
