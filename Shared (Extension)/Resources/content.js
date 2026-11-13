@@ -547,6 +547,10 @@ let retryTimers = new Set();
 function retryLater(item) {
     const timer = setTimeout(() => {
         retryTimers.delete(timer);
+        if (!aiActive()) {
+            finishItem(item);
+            return;
+        }
         item.seq = enqueueSeq++;
         refineQueue.push(item);
         pumpRefine();

@@ -123,8 +123,10 @@ public enum GlossCore {
         return joined
     }
 
+    private static let abbreviations: Set<String> = ["St", "Dr", "Mr", "Mrs", "Ms", "Mt", "Jr", "Sr", "Ave", "Rd", "Prof"]
+
     private static func isAbbreviation(_ word: String) -> Bool {
-        (1...3).contains(word.count) && word.allSatisfy(\.isLetter) && word.first?.isUppercase == true
+        abbreviations.contains(word)
     }
 
     private static func fold(_ text: String) -> String {

@@ -161,7 +161,7 @@ enum Glosser {
             logger.debug("Model answer: \(response.content, privacy: .private)")
             return GlossCore.parse(response.content)
         } catch {
-            logger.error("Gloss failed: \(String(describing: error), privacy: .public)")
+            logger.error("Gloss failed: \(String(describing: error), privacy: .private)")
             return nil
         }
     }

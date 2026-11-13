@@ -37,6 +37,7 @@ const CACHE_MAX = 5000;
 const memCache = new Map();
 const dirty = new Map();
 let dbPromise = null;
+let openedDb = null;
 
 function openDb() {
     if (dbPromise) return dbPromise;
@@ -56,9 +57,10 @@ function openDb() {
         };
         req.onsuccess = () => {
             const db = req.result;
+            openedDb = db;
             db.onversionchange = () => {
                 db.close();
-                dbPromise = null;
+                if (openedDb === db) dbPromise = null;
             };
             dbPromise = Promise.resolve(db);
             resolve(db);
@@ -103,7 +105,7 @@ function transact(db, mode, work) {
             tx = db.transaction(STORE, mode);
             work(tx.objectStore(STORE));
         } catch (e) {
-            dbPromise = null;
+            if (openedDb === db) dbPromise = null;
             resolve(false);
             return;
         }

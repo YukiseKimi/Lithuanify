@@ -1,6 +1,6 @@
 import { test, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { loadBackground } from './harness.mjs'
+import { loadBackground, waitFor } from './harness.mjs'
 
 const reply = (message) => ({
   available: true,
@@ -105,13 +105,17 @@ test('the memory cache stays bounded when site storage is blocked', async () => 
 })
 
 test('a save on a closed cache connection keeps its entries for the next save', async () => {
-  const bg = load({ native: reply })
+  const bg = load({
+    native: (message, call) => {
+      if (call === 2) bg.state('dbPromise.then((db) => db.close())')
+      return reply(message)
+    }
+  })
   await bg.gloss([{ text: 'Aš skaitau.', words: ['skaitau'] }])
-  await bg.state('dbPromise.then((db) => db.close())')
 
   const result = await bg.gloss([{ text: 'Karas tęsiasi.', words: ['karas'] }])
   assert.deepEqual(result.results, [{ karas: 'G:karas' }])
-  await new Promise((resolve) => setTimeout(resolve, 20))
+  await waitFor(() => bg.state('dirty.size === 1 && dbPromise === null'))
   await bg.state('flushCache()')
 
   const fresh = load({ native: reply })
