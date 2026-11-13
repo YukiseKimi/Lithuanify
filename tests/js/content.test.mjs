@@ -155,3 +155,9 @@ test('with the AI off, a word with several meanings keeps its first meaning', as
   assert.deepEqual(page.glosses(), [['Kasa', 'cash register']])
   assert.equal(page.glossCalls(), 0)
 })
+
+test('a capitalised unknown word inside a sentence is taken as a name and not sent', async () => {
+  const page = await loadContent(lt('<p>Vilniaus senamiestis. Vakar sutikau Joną ir NATO.</p>'))
+  await page.settle()
+  assert.deepEqual(page.sent.flat().map((b) => b.words), [['vilniaus', 'senamiestis', 'vakar', 'sutikau', 'ir']])
+})

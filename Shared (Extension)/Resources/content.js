@@ -130,6 +130,12 @@ function isCandidate(token, gloss) {
     return !gloss && token.length >= 2 && isWordToken(token);
 }
 
+function isName(tokens, i) {
+    const token = tokens[i];
+    if (token === token.toLowerCase() || i < 2) return false;
+    return !/[.!?…:]/.test(tokens[i - 1]);
+}
+
 // Replace a text node with ruby elements for the glossed tokens. Unglossed
 // words get their own text node so a later gloss can replace just that word;
 // other runs of text are merged. Returns those candidate parts.
@@ -179,7 +185,7 @@ function renderBlock(node) {
     const seen = new Set();
     tokens.forEach((t, i) => {
         const pick = glosses[i] && needsPick(t);
-        if (!pick && !isCandidate(t, glosses[i])) return;
+        if (!pick && (!isCandidate(t, glosses[i]) || isName(tokens, i))) return;
         const lower = t.toLowerCase();
         if (pick) picks.add(lower);
         if (!seen.has(lower)) {
