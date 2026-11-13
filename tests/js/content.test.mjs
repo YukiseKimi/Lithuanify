@@ -103,3 +103,12 @@ test('an inflected form gets its dictionary meaning from one lookup, and the mod
   answer([{ skaitau: 'G:skaitau' }, { gaisras: 'G:gaisras' }])
   await page.settle()
 })
+
+test('a word whose lookup failed is asked again with the next batch', async () => {
+  const page = await loadContent(lt('<p>Knygą skaitau.</p>'), { lookupFailures: 1 })
+  await page.settle()
+  page.document.body.insertAdjacentHTML('beforeend', '<p id="n">Aš turiu knygą.</p>')
+  await waitFor(() => page.glosses().some(([word, gloss]) => word === 'knygą' && gloss === 'book'))
+  assert.ok(page.lookups.length >= 2)
+  assert.ok(page.lookups[1].includes('knygą'))
+})

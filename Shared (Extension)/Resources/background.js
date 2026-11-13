@@ -261,7 +261,11 @@ function loadDictionary() {
         dictionaryPromise = fetch(browser.runtime.getURL("dictionary/lt-en.tsv"))
             .then((response) => (response.ok ? response.text() : ""))
             .then(parseDictionary)
-            .catch(() => new Map());
+            .catch(() => new Map())
+            .then((meanings) => {
+                if (meanings.size === 0) dictionaryPromise = null;
+                return meanings;
+            });
     }
     return dictionaryPromise;
 }

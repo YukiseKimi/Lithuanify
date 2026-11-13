@@ -29,7 +29,7 @@ export async function waitFor(check, { timeout = 3000, every = 10 } = {}) {
 
 const sampleDictionary = { aš: 'I', knygą: 'book', knygoje: 'book' }
 
-export async function loadContent(html, { mode = 'page', modelAvailable = true, gloss = glossAll, dictionary = sampleDictionary } = {}) {
+export async function loadContent(html, { mode = 'page', modelAvailable = true, gloss = glossAll, dictionary = sampleDictionary, lookupFailures = 0 } = {}) {
   const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true })
   const { window } = dom
   open.add(window)
@@ -50,6 +50,7 @@ export async function loadContent(html, { mode = 'page', modelAvailable = true, 
         if (message.command === 'modelStatus') return { available: modelAvailable }
         if (message.command === 'lookup') {
           lookups.push(plain(message.words))
+          if (lookups.length <= lookupFailures) throw new Error('background gone')
           return Object.fromEntries(message.words.filter((w) => w in dictionary).map((w) => [w, dictionary[w]]))
         }
         if (message.command === 'gloss') {
@@ -101,7 +102,7 @@ export async function loadContent(html, { mode = 'page', modelAvailable = true, 
   return page
 }
 
-export function loadBackground({ native = () => ({ available: true, results: [] }), idb = indexedDB, dictionary = null } = {}) {
+export function loadBackground({ native = () => ({ available: true, results: [] }), idb = indexedDB, dictionary = null, fetchFailures = 0 } = {}) {
   const nativeCalls = []
   const fetches = []
   const context = vm.createContext({
@@ -112,6 +113,7 @@ export function loadBackground({ native = () => ({ available: true, results: [] 
     clearTimeout,
     fetch: async (url) => {
       fetches.push(url)
+      if (fetches.length <= fetchFailures) throw new Error('not readable yet')
       if (dictionary === null) return { ok: false, status: 404, text: async () => '' }
       return { ok: true, status: 200, text: async () => dictionary }
     },

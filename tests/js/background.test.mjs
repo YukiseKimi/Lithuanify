@@ -161,3 +161,9 @@ test('a negated word gets "not" before the meaning of the word after ne or nebe'
     neskaitau: 'not read', nebeskaito: 'not read', nežinios: 'not news'
   })
 })
+
+test('a dictionary file that failed to load is read again on the next lookup', async () => {
+  const bg = load({ dictionary: sample, fetchFailures: 1 })
+  assert.deepEqual(await bg.lookup(['knyga']), {})
+  assert.deepEqual(await bg.lookup(['knyga']), { knyga: 'book' })
+})

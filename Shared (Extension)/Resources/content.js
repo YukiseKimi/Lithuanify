@@ -86,13 +86,14 @@ async function learnWords(items) {
         }
     }
     if (!words.size) return;
-    let found = null;
+    let found;
     try {
         found = await browser.runtime.sendMessage({ command: "lookup", words: [...words] });
     } catch (e) {
-        found = null;
+        return;
     }
-    for (const word of words) meanings.set(word, (found && found[word]) || null);
+    if (!found) return;
+    for (const word of words) meanings.set(word, found[word] || null);
 }
 
 function aiActive() {
