@@ -234,3 +234,20 @@ test('the same sentence in another paragraph comes from the cache', async () => 
   assert.deepEqual(result.results, [{ skaitau: 'G:skaitau' }])
   assert.equal(bg.nativeCalls.length, 1)
 })
+
+test('after a rate limit the model is not asked for a minute, and the page is told to wait', async () => {
+  const bg = load({
+    native: (message, call) => (call === 1
+      ? { available: true, rateLimited: true, results: message.blocks.map(() => []), ok: message.blocks.map(() => false) }
+      : reply(message))
+  })
+  const first = await bg.gloss([{ text: 'Aš skaitau.', words: ['skaitau'] }])
+  assert.equal(first.paused, true)
+  const second = await bg.gloss([{ text: 'Karas tęsiasi.', words: ['karas'] }])
+  assert.equal(second.paused, true)
+  assert.equal(bg.nativeCalls.length, 1)
+
+  bg.state('pausedUntil = 0')
+  const third = await bg.gloss([{ text: 'Karas tęsiasi.', words: ['karas'] }])
+  assert.deepEqual(third.results, [{ karas: 'G:karas' }])
+})

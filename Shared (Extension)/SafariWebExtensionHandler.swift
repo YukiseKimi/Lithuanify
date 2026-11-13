@@ -59,8 +59,10 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             return
         }
         Task {
-            let (results, ok) = await Glosser.gloss(blocks)
-            self.complete(context, with: ["available": true, "results": results, "ok": ok])
+            let answer = await Glosser.gloss(blocks)
+            self.complete(context, with: [
+                "available": true, "results": answer.results, "ok": answer.ok, "rateLimited": answer.rateLimited,
+            ])
         }
     }
 }
@@ -98,39 +100,51 @@ enum Glosser {
 
     static let maxTurnsPerSession = 4
 
-    static func gloss(_ blocks: [GlossBlock]) async -> (results: [[String]], ok: [Bool]) {
+    enum Outcome {
+        case answered([WordAnswer])
+        case failed
+        case rateLimited
+    }
+
+    static func gloss(_ blocks: [GlossBlock]) async -> (results: [[String]], ok: [Bool], rateLimited: Bool) {
         var results = blocks.map { Array(repeating: "", count: $0.words.count) }
         var ok = Array(repeating: true, count: blocks.count)
         let jobs = GlossCore.makeJobs(blocks)
-        guard !jobs.isEmpty else { return (results, ok) }
+        guard !jobs.isEmpty else { return (results, ok, false) }
 
         var session = SessionPool.shared.take()
         var turns = 0
 
-        for job in jobs {
+        for (n, job) in jobs.enumerated() {
             if turns >= maxTurnsPerSession {
                 session = SessionPool.makeSession()
                 turns = 0
             }
-            var items = await run(job, on: session)
+            var outcome = await run(job, on: session)
             turns += 1
-            if items == nil && turns > 1 {
+            if case .failed = outcome, turns > 1 {
                 session = SessionPool.makeSession()
-                items = await run(job, on: session)
+                outcome = await run(job, on: session)
                 turns = 1
             }
-            guard let items else {
+            switch outcome {
+            case .answered(let items):
+                GlossCore.apply(items, of: job, to: &results)
+            case .failed:
                 for target in job.targets { ok[target.block] = false }
-                continue
+            case .rateLimited:
+                for rest in jobs[n...] {
+                    for target in rest.targets { ok[target.block] = false }
+                }
+                return (results, ok, true)
             }
-            GlossCore.apply(items, of: job, to: &results)
         }
 
         SessionPool.shared.fillIfEmpty()
-        return (results, ok)
+        return (results, ok, false)
     }
 
-    private static func run(_ job: GlossCore.Job, on session: LanguageModelSession) async -> [WordAnswer]? {
+    private static func run(_ job: GlossCore.Job, on session: LanguageModelSession) async -> Outcome {
         do {
             let response = try await session.respond(
                 to: GlossCore.prompt(for: job),
@@ -138,10 +152,13 @@ enum Glosser {
                 options: GenerationOptions(samplingMode: .greedy)
             )
             logger.debug("Model answer: \(String(describing: response.content.words), privacy: .private)")
-            return response.content.words
+            return .answered(response.content.words)
+        } catch LanguageModelSession.GenerationError.rateLimited {
+            logger.notice("Gloss rate limited")
+            return .rateLimited
         } catch {
             logger.error("Gloss failed: \(String(describing: error), privacy: .private)")
-            return nil
+            return .failed
         }
     }
 }

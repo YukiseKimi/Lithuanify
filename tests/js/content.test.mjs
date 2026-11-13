@@ -172,3 +172,19 @@ test('a known phrase shows one meaning over the whole phrase, and its words are 
   assert.deepEqual(page.sent.flat().map((b) => b.words), [['skaitau']])
   assert.ok(page.lookups[0].includes('vis dėlto'))
 })
+
+test('a paused reply keeps the dictionary meanings and asks again after the pause, without using the retry', async () => {
+  let calls = 0
+  const page = await loadContent(lt('<p>Aš skaitau knygą.</p>'), {
+    reply: (blocks) => {
+      calls += 1
+      return calls <= 2
+        ? { available: true, paused: true, retryInMs: 50, results: blocks.map(() => null) }
+        : { available: true, results: blocks.map((b) => Object.fromEntries(b.words.map((w) => [w, 'G:' + w]))) }
+    }
+  })
+  await waitFor(() => calls === 1)
+  assert.deepEqual(page.glosses(), [['Aš', 'I'], ['knygą', 'book']])
+  await waitFor(() => page.glosses().length === 3)
+  assert.equal(calls, 3)
+})

@@ -29,7 +29,7 @@ export async function waitFor(check, { timeout = 3000, every = 10 } = {}) {
 
 const sampleDictionary = { aš: 'I', knygą: 'book', knygoje: 'book' }
 
-export async function loadContent(html, { mode = 'page', modelAvailable = true, gloss = glossAll, dictionary = sampleDictionary, lookupFailures = 0 } = {}) {
+export async function loadContent(html, { mode = 'page', modelAvailable = true, gloss = glossAll, dictionary = sampleDictionary, lookupFailures = 0, reply = null } = {}) {
   const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true })
   const { window } = dom
   open.add(window)
@@ -57,6 +57,7 @@ export async function loadContent(html, { mode = 'page', modelAvailable = true, 
         if (message.command === 'gloss') {
           glossCalls += 1
           sent.push(plain(message.blocks))
+          if (reply) return reply(message.blocks, glossCalls)
           return { available: true, results: await gloss(message.blocks, glossCalls) }
         }
         return undefined
@@ -75,7 +76,7 @@ export async function loadContent(html, { mode = 'page', modelAvailable = true, 
     lookups,
     glossCalls: () => glossCalls,
     state: (expression) => window.eval(expression),
-    idle: () => window.eval('!rendering && !refining && renderQueue.length === 0 && refineQueue.length === 0 && (typeof retryTimers === "undefined" || retryTimers.size === 0)'),
+    idle: () => window.eval('!rendering && !refining && renderQueue.length === 0 && refineQueue.length === 0 && (typeof retryTimers === "undefined" || retryTimers.size === 0) && (typeof pauseTimer === "undefined" || pauseTimer === null)'),
     settle: async () => {
       await waitFor(() => window.eval('typeof enabled') === 'boolean')
       await new Promise((resolve) => setTimeout(resolve, 20))

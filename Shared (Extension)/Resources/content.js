@@ -507,9 +507,19 @@ function retryLater(item) {
     retryTimers.add(timer);
 }
 
+let pauseTimer = null;
+
+function pauseRefine(ms) {
+    clearTimeout(pauseTimer);
+    pauseTimer = setTimeout(() => {
+        pauseTimer = null;
+        pumpRefine();
+    }, Math.max(Number(ms) || 0, 0));
+}
+
 // Stage 2: on-device model for the words the dictionary didn't know.
 async function pumpRefine() {
-    if (refining || !aiActive() || !refineQueue.length) return;
+    if (refining || pauseTimer || !aiActive() || !refineQueue.length) return;
     refining = true;
     const gen = generation;
     try {
@@ -533,6 +543,15 @@ async function pumpRefine() {
                 modelAvailable = false;
                 batch.forEach(finishItem);
                 refineQueue.splice(0).forEach(finishItem);
+                break;
+            }
+            if (res && res.paused) {
+                const results = Array.isArray(res.results) ? res.results : [];
+                records.forEach((record, i) => {
+                    if (results[i]) applyRefinement(record, results[i]);
+                });
+                refineQueue.unshift(...batch);
+                pauseRefine(res.retryInMs);
                 break;
             }
             const results = (res && Array.isArray(res.results)) ? res.results : null;
@@ -830,6 +849,8 @@ function disable() {
     refineQueue.length = 0;
     retryTimers.forEach(clearTimeout);
     retryTimers.clear();
+    clearTimeout(pauseTimer);
+    pauseTimer = null;
     enqueueSeq = 0;
     removeAnnotations();
 }

@@ -187,6 +187,16 @@ function sentenceOf(text, word) {
     return (found || text).trim();
 }
 
+const PAUSE_MS = 60 * 1000;
+let pausedUntil = 0;
+
+const pausedReply = (blocks) => ({
+    available: true,
+    paused: true,
+    retryInMs: Math.max(pausedUntil - Date.now(), 0),
+    results: blocks.map(() => null)
+});
+
 async function handleGloss(blocks) {
     const valid = blocks.filter((b) =>
         b && typeof b.text === "string" && Array.isArray(b.words) && b.words.length);
@@ -206,6 +216,7 @@ async function handleGloss(blocks) {
     }
 
     const failed = new Set();
+    if (need.size && Date.now() < pausedUntil) return pausedReply(blocks);
     if (need.size) {
         const entries = [...need.values()];
         let resp = null;
@@ -238,6 +249,10 @@ async function handleGloss(blocks) {
                 });
             });
             flushCache();
+            if (resp.rateLimited) {
+                pausedUntil = Date.now() + PAUSE_MS;
+                return pausedReply(blocks);
+            }
         } else {
             entries.forEach((e) => e.blocks.forEach((b) => failed.add(b)));
         }
