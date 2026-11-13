@@ -65,7 +65,7 @@ export async function loadContent(html, { mode = 'page', modelAvailable = true, 
     sent,
     glossCalls: () => glossCalls,
     state: (expression) => window.eval(expression),
-    idle: () => window.eval('!rendering && !refining && renderQueue.length === 0 && refineQueue.length === 0'),
+    idle: () => window.eval('!rendering && !refining && renderQueue.length === 0 && refineQueue.length === 0 && (typeof retryTimers === "undefined" || retryTimers.size === 0)'),
     settle: async () => {
       await waitFor(() => window.eval('typeof enabled') === 'boolean')
       await new Promise((resolve) => setTimeout(resolve, 20))

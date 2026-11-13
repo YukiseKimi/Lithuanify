@@ -541,6 +541,19 @@ function takeRefineBatch() {
     return batch;
 }
 
+const RETRY_DELAY_MS = 1000;
+let retryTimers = new Set();
+
+function retryLater(item) {
+    const timer = setTimeout(() => {
+        retryTimers.delete(timer);
+        item.seq = enqueueSeq++;
+        refineQueue.push(item);
+        pumpRefine();
+    }, RETRY_DELAY_MS);
+    retryTimers.add(timer);
+}
+
 // Stage 2: on-device model for the words the dictionary didn't know.
 async function pumpRefine() {
     if (refining || !aiActive() || !refineQueue.length) return;
@@ -579,8 +592,7 @@ async function pumpRefine() {
                 if (left.length && !item.retried) {
                     item.retried = true;
                     item.records = left;
-                    item.seq = enqueueSeq++;
-                    refineQueue.push(item);
+                    retryLater(item);
                 } else {
                     finishItem(item);
                 }
@@ -651,13 +663,17 @@ function detectLithuanian() {
 
 const HOVER_DELAY_MS = 300;
 const SELECT_DELAY_MS = 500;
-let requestedBlocks = new WeakSet();
+let displayOf = new WeakMap();
 let hoverTimer = null;
 let selectTimer = null;
 let pointerDown = false;
 
 function isInlineDisplay(el) {
-    const display = getComputedStyle(el).display;
+    let display = displayOf.get(el);
+    if (display === undefined) {
+        display = getComputedStyle(el).display;
+        displayOf.set(el, display);
+    }
     return display === "inline" || display === "contents" || display.startsWith("ruby");
 }
 
@@ -671,8 +687,7 @@ function blockFor(node) {
 }
 
 function glossBlock(block) {
-    if (!enabled || !block || requestedBlocks.has(block)) return;
-    requestedBlocks.add(block);
+    if (!enabled || !block) return;
     const nodes = [];
     collectTextNodes(block, nodes);
     scheduleTextNodes(nodes.filter((n) => blockFor(n) === block), true);
@@ -764,7 +779,7 @@ function stopOnDemand() {
     document.removeEventListener("mousedown", onPointerDown, true);
     document.removeEventListener("mouseup", onPointerUp, true);
     document.removeEventListener("selectionchange", onSelectionChange);
-    requestedBlocks = new WeakSet();
+    displayOf = new WeakMap();
 }
 
 // Batch dynamic mutations.
@@ -853,6 +868,8 @@ function disable() {
     itemsByElement.clear();
     renderQueue.length = 0;
     refineQueue.length = 0;
+    retryTimers.forEach(clearTimeout);
+    retryTimers.clear();
     enqueueSeq = 0;
     removeAnnotations();
 }

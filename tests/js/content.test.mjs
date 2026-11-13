@@ -41,11 +41,15 @@ test('a selected part of a word glosses only that word, with the whole sentence 
   assert.equal(page.plainText('#p'), 'Vilniaus senamiestis yra gražus.')
 })
 
-test('a block whose model call failed is asked again once', async () => {
+test('a block whose model call failed is asked again once, after a pause', async () => {
   const page = await loadContent(lt('<p id="a">Aš skaitau.</p><p id="b">Vilniaus senamiestis.</p>'), {
     gloss: (blocks, call) => blocks.map((b) =>
       call === 1 && b.text.startsWith('Vilniaus') ? null : Object.fromEntries(b.words.map((w) => [w, 'G:' + w])))
   })
+  await waitFor(() => page.glossCalls() === 1)
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  assert.equal(page.glossCalls(), 1)
+
   await page.settle()
   assert.equal(page.glossCalls(), 2)
   assert.deepEqual(page.sent[1], [{ text: 'Vilniaus senamiestis.', words: ['vilniaus', 'senamiestis'] }])
@@ -69,4 +73,20 @@ test('turning Lithuanify off gives back the original text', async () => {
   page.state('disable()')
   assert.equal(page.glosses().length, 0)
   assert.equal(page.document.querySelector('#p').innerHTML, 'Aš skaitau knygą apie <a href="#">Lietuvos istoriją</a>.')
+})
+
+test('hover mode glosses a paragraph again after its text changes', async () => {
+  const page = await loadContent(lt('<p id="p">Aš skaitau.</p>'), { mode: 'hover' })
+  await page.settle()
+  const hover = () => page.document.querySelector('#p').dispatchEvent(new page.window.MouseEvent('mouseover', { bubbles: true }))
+
+  hover()
+  await waitFor(() => page.glosses().length === 2)
+  await page.settle()
+
+  page.document.querySelector('#p').textContent = 'Karas tęsiasi.'
+  hover()
+  await waitFor(() => page.glosses().length === 2 && page.glosses()[0][0] === 'Karas')
+  await page.settle()
+  assert.deepEqual(page.glosses(), [['Karas', 'G:karas'], ['tęsiasi', 'G:tęsiasi']])
 })
