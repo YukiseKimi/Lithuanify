@@ -238,12 +238,55 @@ async function handleGloss(blocks) {
     };
 }
 
+const DIACRITICS = { "ą": "a", "č": "c", "ę": "e", "ė": "e", "į": "i", "š": "s", "ų": "u", "ū": "u", "ž": "z" };
+const foldWord = (word) => word.replace(/[ąčęėįšųūž]/g, (c) => DIACRITICS[c]);
+let dictionaryPromise = null;
+
+function parseDictionary(text) {
+    const meanings = new Map();
+    const lines = text.split("\n").map((line) => line.split("\t")).filter((cols) => cols.length >= 2);
+    const add = (word, gloss) => {
+        if (!meanings.has(word)) meanings.set(word, gloss);
+    };
+    for (const [gloss, lemma] of lines) add(lemma, gloss);
+    for (const [gloss, , forms = ""] of lines) {
+        for (const form of forms.split(" ")) if (form) add(form, gloss);
+    }
+    for (const [word, gloss] of [...meanings]) add(foldWord(word), gloss);
+    return meanings;
+}
+
+function loadDictionary() {
+    if (!dictionaryPromise) {
+        dictionaryPromise = fetch(browser.runtime.getURL("dictionary/lt-en.tsv"))
+            .then((response) => (response.ok ? response.text() : ""))
+            .then(parseDictionary)
+            .catch(() => new Map());
+    }
+    return dictionaryPromise;
+}
+
+async function handleLookup(words) {
+    const meanings = await loadDictionary();
+    const found = {};
+    for (const word of words) {
+        if (typeof word !== "string") continue;
+        const lower = word.toLowerCase();
+        const gloss = meanings.get(lower) || meanings.get(foldWord(lower));
+        if (gloss) found[word] = gloss;
+    }
+    return found;
+}
+
 // --- Message routing --------------------------------------------------------
 
 browser.runtime.onMessage.addListener((request) => {
     if (!request) return;
     if (request.command === "modelStatus") {
         return checkModel().then((available) => ({ available }));
+    }
+    if (request.command === "lookup" && Array.isArray(request.words)) {
+        return handleLookup(request.words);
     }
     if (request.command === "gloss" && Array.isArray(request.blocks)) {
         return handleGloss(request.blocks);

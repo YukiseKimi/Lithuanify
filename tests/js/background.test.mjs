@@ -122,3 +122,35 @@ test('a save on a closed cache connection keeps its entries for the next save', 
   await fresh.gloss([{ text: 'Karas tęsiasi.', words: ['karas'] }])
   assert.equal(fresh.nativeCalls.length, 0)
 })
+
+const sample = [
+  'book\tknyga\tknygoje knygos knygą',
+  'read\tskaityti\tskaitau skaito',
+  'fire\tgaisras\tgaisro',
+  'of the book\tknygos\t',
+  'news\tžinia\tžinios',
+  ''
+].join('\n')
+
+test('a lookup finds the meaning of a lemma, an inflected form and a spelling without diacritics', async () => {
+  const bg = load({ dictionary: sample })
+  const found = await bg.lookup(['Knygoje', 'skaitau', 'knyga', 'zinios', 'nežinomas'])
+  assert.deepEqual(found, { Knygoje: 'book', skaitau: 'read', knyga: 'book', zinios: 'news' })
+})
+
+test('a headword wins over the same spelling as a form of another word', async () => {
+  const bg = load({ dictionary: sample })
+  assert.deepEqual(await bg.lookup(['knygos']), { knygos: 'of the book' })
+})
+
+test('the dictionary file is read once for many lookups', async () => {
+  const bg = load({ dictionary: sample })
+  await Promise.all([bg.lookup(['knyga']), bg.lookup(['gaisro'])])
+  await bg.lookup(['skaito'])
+  assert.deepEqual(bg.fetches, ['safari-web-extension://lithuanify/dictionary/lt-en.tsv'])
+})
+
+test('a missing dictionary file gives no meanings and no error', async () => {
+  const bg = load({ dictionary: null })
+  assert.deepEqual(await bg.lookup(['knyga']), {})
+})

@@ -93,17 +93,24 @@ export async function loadContent(html, { mode = 'page', modelAvailable = true, 
   return page
 }
 
-export function loadBackground({ native, idb = indexedDB }) {
+export function loadBackground({ native = () => ({ available: true, results: [] }), idb = indexedDB, dictionary = null } = {}) {
   const nativeCalls = []
+  const fetches = []
   const context = vm.createContext({
     indexedDB: idb,
     IDBKeyRange,
     console,
     setTimeout,
     clearTimeout,
+    fetch: async (url) => {
+      fetches.push(url)
+      if (dictionary === null) return { ok: false, status: 404, text: async () => '' }
+      return { ok: true, status: 200, text: async () => dictionary }
+    },
     browser: {
       storage: { local: { remove: async () => {} } },
       runtime: {
+        getURL: (path) => 'safari-web-extension://lithuanify/' + path,
         onMessage: { addListener() {} },
         sendNativeMessage: async (_id, message) => {
           nativeCalls.push(plain(message))
@@ -119,6 +126,8 @@ export function loadBackground({ native, idb = indexedDB }) {
   }
   return {
     gloss: async (blocks) => plain(await context.handleGloss(blocks)),
+    lookup: async (words) => plain(await context.handleLookup(words)),
+    fetches,
     nativeCalls,
     close,
     state: (expression) => vm.runInContext(expression, context)
