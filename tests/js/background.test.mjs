@@ -202,3 +202,19 @@ test('a lookup gives every meaning of a word and its lemma', async () => {
   const bg = load({ dictionary: 'braid|pancreas|cash register\tkasa\tkasos\n' })
   assert.deepEqual(await bg.lookup(['kasos']), { kasos: { m: ['braid', 'pancreas', 'cash register'], l: 'kasa' } })
 })
+
+test('answers cached before the model could pick are not reused', async () => {
+  const old = await new Promise((resolve) => {
+    const request = indexedDB.open('lithuanify', 3)
+    request.onupgradeneeded = () => {
+      const store = request.result.createObjectStore('glosses', { keyPath: 'k' })
+      store.createIndex('t', 't')
+      store.put({ k: 'Kasa uždaryta.\u0001kasa', v: { kasa: 'old free answer' }, t: 1 })
+    }
+    request.onsuccess = () => resolve(request.result)
+  })
+  old.close()
+  const bg = load({ native: reply })
+  const result = await bg.gloss([{ text: 'Kasa uždaryta.', words: ['kasa'] }])
+  assert.deepEqual(result.results, [{ kasa: 'G:kasa' }])
+})
