@@ -130,6 +130,9 @@ const sample = [
   'fire\tgaisras\tgaisro',
   'of the book\tknygos\t',
   'news\tžinia\tžinios',
+  'common\tbendras\tbendro\tne',
+  'cash register\tkasa\tkasos',
+  'braid\tkasa\tkasų',
   ''
 ].join('\n')
 
@@ -175,4 +178,20 @@ test('a dictionary file that failed to load is read again on the next lookup', a
   const bg = load({ dictionary: sample, fetchFailures: 1 })
   assert.deepEqual(await bg.lookup(['knyga']), {})
   assert.deepEqual(await bg.lookup(['knyga']), { knyga: 'book' })
+})
+
+test('a word that starts with nebe but negates with ne still gets "not"', async () => {
+  const bg = load({ dictionary: sample })
+  assert.deepEqual(await bg.lookup(['nebendras']), { nebendras: 'not common' })
+})
+
+test('a word with diacritics never takes the meaning of another word spelled without them', async () => {
+  const bg = load({ dictionary: sample })
+  assert.deepEqual(await bg.lookup(['gaisrą', 'kąsa']), {})
+  assert.deepEqual(await bg.lookup(['gaisro', 'zinia']), { gaisro: 'fire', zinia: 'news' })
+})
+
+test('two lemmas with the same headword and different meanings give that headword no meaning', async () => {
+  const bg = load({ dictionary: sample })
+  assert.deepEqual(await bg.lookup(['kasa', 'kasos', 'kasų']), { kasos: 'cash register', kasų: 'braid' })
 })

@@ -4,3 +4,4 @@
 {"word":"Vilnius","lang_code":"lt","pos":"name","senses":[{"glosses":["Vilnius (capital)"]}]}
 {"word":"book","lang_code":"en","pos":"noun","senses":[{"glosses":["knyga"]}]}
 {"word":"gaisras","lang_code":"lt","pos":"noun","senses":[{"glosses":["fire, blaze"]},{"glosses":["conflagration"]}]}
+{"word":"gaisras","lang_code":"lt","pos":"verb","senses":[{"glosses":["burning"]}],"forms":[{"form":"gaisrą"}]}

@@ -112,7 +112,7 @@ The script downloads its sources into `build/dictionary` (about 85 MB, ignored b
 
 ## Requirements
 
-- Xcode and a recent macOS/iOS (Safari Web Extensions, Manifest V3).
+- Xcode 26 or later. The app and the extension need **iOS 26** or **macOS 26**.
 - For the on-device AI path: a device with **Apple Intelligence** enabled.
   Without it, Lithuanify uses the offline dictionary only.
 

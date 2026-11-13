@@ -69,6 +69,7 @@ function isWordToken(token) {
     return WORD_RE.test(token);
 }
 
+const MEANINGS_MAX = 20000;
 let meanings = new Map();
 
 function dictLookup(word) {
@@ -85,15 +86,17 @@ async function learnWords(items) {
             }
         }
     }
-    if (!words.size) return;
+    if (!words.size) return true;
     let found;
     try {
         found = await browser.runtime.sendMessage({ command: "lookup", words: [...words] });
     } catch (e) {
-        return;
+        return false;
     }
-    if (!found) return;
+    if (!found) return false;
+    if (meanings.size + words.size > MEANINGS_MAX) meanings.clear();
     for (const word of words) meanings.set(word, found[word] || null);
+    return true;
 }
 
 function aiActive() {
@@ -237,8 +240,8 @@ function logTiming(label) {
 // --- Scheduling -------------------------------------------------------------
 // Two stages, both ordered visible-first, then by priority (title h1 → body →
 // nav/menus/footers last), then document order:
-//   1. Render: dictionary glosses, a few milliseconds per frame. Fast, so the
-//      whole page is covered quickly.
+//   1. Render: dictionary glosses, 25 blocks at a time, after one lookup
+//      message to the background page for the batch's new words.
 //   2. Refine: words the dictionary didn't know go to the on-device model,
 //      several blocks per request. One request at a time.
 // Work runs only while the tab is in the foreground.
@@ -386,8 +389,15 @@ async function pumpRender() {
     try {
         while (enabled && isVisible() && renderQueue.length) {
             const items = renderQueue.splice(0, RENDER_BATCH);
-            await learnWords(items);
+            const learned = await learnWords(items);
             if (gen !== generation) return;
+            if (!learned && items.some((item) => !item.lookupRetried)) {
+                items.forEach((item) => { item.lookupRetried = true; });
+                renderQueue.unshift(...items);
+                await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+                if (gen !== generation) return;
+                continue;
+            }
             items.forEach(renderItem);
             pumpRefine();
         }

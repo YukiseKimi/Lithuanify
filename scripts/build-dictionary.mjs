@@ -36,20 +36,22 @@ export function readWiktionary(lines) {
     if (entry.lang_code !== 'lt' || SKIPPED_POS.has(entry.pos)) continue
     const word = (entry.word || '').toLowerCase()
     if (!isWord(word)) continue
+    let gloss = ''
     for (const sense of entry.senses || []) {
       if (Array.isArray(sense.form_of) && sense.form_of.length) {
         for (const target of sense.form_of) formOf.push([word, (target.word || '').toLowerCase()])
         continue
       }
-      const gloss = shortGloss((sense.glosses || [])[0] || '')
-      if (!gloss || lemmas.has(word)) continue
-      const forms = new Set()
-      for (const form of entry.forms || []) {
-        const text = withoutStress((form.form || '').toLowerCase())
-        if (isWord(text) && text !== word) forms.add(text)
-      }
-      lemmas.set(word, { gloss, forms })
+      if (!gloss) gloss = shortGloss((sense.glosses || [])[0] || '')
     }
+    if (!gloss) continue
+    const known = lemmas.get(word)
+    const forms = known ? known.forms : new Set()
+    for (const form of entry.forms || []) {
+      const text = withoutStress((form.form || '').toLowerCase())
+      if (isWord(text) && text !== word) forms.add(text)
+    }
+    if (!known) lemmas.set(word, { gloss, forms })
   }
   for (const [form, lemma] of formOf) {
     const target = lemmas.get(lemma)

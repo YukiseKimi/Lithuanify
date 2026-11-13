@@ -19,6 +19,7 @@ test('Wiktionary gives Lithuanian lemmas with their forms, and skips names and o
   assert.deepEqual([...lemmas.get('knyga').forms].sort(), ['knygoje', 'knygos', 'knygą'])
   assert.deepEqual([...lemmas.get('skaityti').forms], ['skaitau'])
   assert.equal(lemmas.get('gaisras').gloss, 'fire')
+  assert.ok(lemmas.get('gaisras').forms.has('gaisrą'))
 })
 
 test('Hunspell suffix rules make each form, respect conditions, and add no prefixed forms', () => {
@@ -37,7 +38,7 @@ test('the dictionary file has one line per lemma: gloss, lemma, every other form
   const negatable = new Set()
   const forms = expandHunspell(fixture('lt.dic'), parseAffixes(fixture('lt.aff')), negatable)
   assert.equal(writeDictionary(lemmas, forms, negatable), [
-    'fire\tgaisras\tgaisro gaisrui',
+    'fire\tgaisras\tgaisro gaisrui gaisrą',
     'book\tknyga\tknygoje knygomis knygos knygą\tne',
     'read\tskaityti\tskaitau',
     ''

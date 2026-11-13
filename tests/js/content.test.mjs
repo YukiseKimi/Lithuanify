@@ -112,3 +112,20 @@ test('a word whose lookup failed is asked again with the next batch', async () =
   assert.ok(page.lookups.length >= 2)
   assert.ok(page.lookups[1].includes('knygą'))
 })
+
+test('a batch whose lookup failed waits and asks again before it renders', async () => {
+  const page = await loadContent(lt('<p>Aš skaitau knygą.</p>'), { modelAvailable: false, lookupFailures: 1 })
+  await page.settle()
+  assert.equal(page.lookups.length, 2)
+  assert.deepEqual(page.glosses(), [['Aš', 'I'], ['knygą', 'book']])
+})
+
+test('the page keeps at most 20000 looked-up words', async () => {
+  const word = (n) => 'w' + [...n.toString(26).padStart(4, '0')].map((d) => String.fromCharCode(97 + parseInt(d, 26))).join('')
+  const words = Array.from({ length: 20050 }, (_, i) => word(i))
+  const html = Array.from({ length: 401 }, (_, p) => `<p>${words.slice(p * 50, p * 50 + 50).join(' ')}</p>`).join('')
+  const page = await loadContent(lt(html), { modelAvailable: false })
+  await page.settle()
+  assert.equal(new Set(words).size, 20050)
+  assert.ok(page.state('meanings.size') <= 20000)
+})

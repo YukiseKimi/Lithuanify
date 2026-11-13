@@ -54,7 +54,7 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
     }
 
     private func handleGloss(blocks: [GlossBlock], context: NSExtensionContext) {
-        guard SystemLanguageModel.default.isAvailable else {
+        guard AIStatus.current == .ready else {
             complete(context, with: ["available": false, "results": []])
             return
         }
@@ -84,7 +84,7 @@ final class SessionPool: Sendable {
     }
 
     func fillIfEmpty() {
-        guard SystemLanguageModel.default.isAvailable else { return }
+        guard AIStatus.current == .ready else { return }
         warm.withLock { warm in
             guard warm == nil else { return }
             let session = Self.makeSession()

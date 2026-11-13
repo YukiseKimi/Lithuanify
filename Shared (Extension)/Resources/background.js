@@ -239,6 +239,7 @@ async function handleGloss(blocks) {
 }
 
 const DIACRITICS = { "ą": "a", "č": "c", "ę": "e", "ė": "e", "į": "i", "š": "s", "ų": "u", "ū": "u", "ž": "z" };
+const MARKED = /[ąčęėįšųūž]/;
 const foldWord = (word) => word.replace(/[ąčęėįšųūž]/g, (c) => DIACRITICS[c]);
 let dictionaryPromise = null;
 
@@ -248,7 +249,11 @@ function parseDictionary(text) {
     const byWord = new Map();
     const lemmas = text.split("\n").map((line) => line.split("\t")).filter((cols) => cols.length >= 2)
         .map(([gloss, lemma, forms = "", ne]) => ({ lemma, forms, entry: { gloss, ne: ne === "ne" } }));
-    for (const { lemma, entry } of lemmas) if (!byWord.has(lemma)) byWord.set(lemma, entry);
+    for (const { lemma, entry } of lemmas) {
+        const known = byWord.get(lemma);
+        if (known === undefined) byWord.set(lemma, entry);
+        else if (known !== AMBIGUOUS && known.gloss !== entry.gloss) byWord.set(lemma, AMBIGUOUS);
+    }
     const headwords = new Set(byWord.keys());
     for (const { forms, entry } of lemmas) {
         for (const form of forms.split(" ")) {
@@ -258,22 +263,22 @@ function parseDictionary(text) {
             else if (known !== AMBIGUOUS && known.gloss !== entry.gloss) byWord.set(form, AMBIGUOUS);
         }
     }
-    const folded = new Map();
+    const unmarked = new Map();
     for (const [word, entry] of byWord) {
+        if (entry === AMBIGUOUS || !MARKED.test(word)) continue;
         const key = foldWord(word);
-        const known = folded.get(key);
-        if (known === undefined) folded.set(key, entry);
-        else if (known !== entry && (known === AMBIGUOUS || entry === AMBIGUOUS || known.gloss !== entry.gloss)) folded.set(key, AMBIGUOUS);
+        if (byWord.has(key)) continue;
+        const known = unmarked.get(key);
+        if (known === undefined) unmarked.set(key, entry);
+        else if (known !== AMBIGUOUS && known.gloss !== entry.gloss) unmarked.set(key, AMBIGUOUS);
     }
-    const exact = new Map();
-    for (const [word, entry] of byWord) {
-        if (entry !== AMBIGUOUS && folded.get(foldWord(word)) === AMBIGUOUS) exact.set(word, entry);
-    }
-    return { exact, folded, size: folded.size };
+    return { byWord, unmarked, size: byWord.size };
 }
 
 function entryOf(meanings, word) {
-    return meanings.exact.get(word) || meanings.folded.get(foldWord(word)) || null;
+    if (meanings.byWord.has(word)) return meanings.byWord.get(word);
+    if (MARKED.test(word)) return null;
+    return meanings.unmarked.get(word) || null;
 }
 
 function loadDictionary() {
@@ -295,10 +300,12 @@ const NEGATIONS = ["nebe", "ne"];
 function meaningOf(meanings, word) {
     const entry = entryOf(meanings, word);
     if (entry) return entry.gloss;
-    const prefix = NEGATIONS.find((p) => word.startsWith(p) && word.length > p.length + 2);
-    if (!prefix) return null;
-    const base = entryOf(meanings, word.slice(prefix.length));
-    return base && base.ne ? "not " + base.gloss : null;
+    for (const prefix of NEGATIONS) {
+        if (!word.startsWith(prefix) || word.length <= prefix.length + 2) continue;
+        const base = entryOf(meanings, word.slice(prefix.length));
+        if (base && base.ne) return "not " + base.gloss;
+    }
+    return null;
 }
 
 async function handleLookup(words) {
