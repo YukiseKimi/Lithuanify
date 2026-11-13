@@ -10,34 +10,32 @@ const NATIVE_APP_ID = "application.id"; // Safari routes this to the native hand
 
 // --- On-device model status -------------------------------------------------
 
-let modelAvailable = null; // null = unknown, then cached boolean
+const RECHECK_MS = 60 * 1000;
+let modelAvailable = null;
+let checkedAt = 0;
 
 async function checkModel() {
-    if (modelAvailable !== null) return modelAvailable;
+    if (modelAvailable === true) return true;
+    if (modelAvailable === false && Date.now() - checkedAt < RECHECK_MS) return false;
     try {
         const resp = await browser.runtime.sendNativeMessage(NATIVE_APP_ID, { command: "modelStatus" });
         modelAvailable = !!(resp && resp.available);
     } catch (e) {
         modelAvailable = false;
     }
+    checkedAt = Date.now();
     return modelAvailable;
 }
 
 // --- Gloss cache (IndexedDB) ------------------------------------------------
-// Key: the text block. Value: { word: gloss } for the words that were asked
-// about ("" means the model had no meaning, so it isn't asked again).
-// A hot in-memory Map sits in front; writes are batched and debounced, and
-// only new entries are written.
 
 const DB_NAME = "lithuanify";
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 const STORE = "glosses";
 const CACHE_MAX = 5000;
-const FLUSH_DELAY_MS = 1000;
 
 const memCache = new Map();
 const dirty = new Map();
-let flushTimer = null;
 let dbPromise = null;
 
 function openDb() {
@@ -51,10 +49,22 @@ function openDb() {
             return;
         }
         req.onupgradeneeded = () => {
-            const store = req.result.createObjectStore(STORE, { keyPath: "k" });
+            const db = req.result;
+            if (db.objectStoreNames.contains(STORE)) db.deleteObjectStore(STORE);
+            const store = db.createObjectStore(STORE, { keyPath: "k" });
             store.createIndex("t", "t");
         };
-        req.onsuccess = () => resolve(req.result);
+        req.onsuccess = () => {
+            const db = req.result;
+            db.onversionchange = () => {
+                db.close();
+                dbPromise = null;
+            };
+            dbPromise = Promise.resolve(db);
+            resolve(db);
+            flushCache();
+        };
+        req.onblocked = () => resolve(null);
         req.onerror = () => resolve(null); // fall back to memory-only
     });
     return dbPromise;
@@ -94,17 +104,14 @@ async function cacheGetMany(keys) {
 function cachePut(key, value) {
     memCache.set(key, value);
     dirty.set(key, value);
-    if (!flushTimer) flushTimer = setTimeout(flushCache, FLUSH_DELAY_MS);
 }
 
 async function flushCache() {
-    flushTimer = null;
     if (!dirty.size) return;
-    const entries = [...dirty];
-    dirty.clear();
-
     const db = await openDb();
     if (!db) return;
+    const entries = [...dirty];
+    dirty.clear();
     const now = Date.now();
     await new Promise((resolve) => {
         const tx = db.transaction(STORE, "readwrite");
@@ -143,18 +150,21 @@ browser.storage.local.remove(["glossCache", "translationCache"]).catch(() => {})
 // --- Gloss requests ---------------------------------------------------------
 
 // blocks: [{ text, words: [lowercased unknown words] }]
-// Returns { available, results: [{ word: gloss }] } aligned with `blocks`.
+const keyOf = (b) => b.text + "\u0001" + b.words.join(" ");
+
 async function handleGloss(blocks) {
     const valid = blocks.filter((b) =>
         b && typeof b.text === "string" && Array.isArray(b.words) && b.words.length);
-    const cached = await cacheGetMany([...new Set(valid.map((b) => b.text))]);
+    const cached = await cacheGetMany([...new Set(valid.map(keyOf))]);
 
     // Unique uncached blocks to send to the model.
     const need = new Map();
     for (const b of valid) {
-        if (!cached.has(b.text) && !need.has(b.text)) need.set(b.text, b);
+        const key = keyOf(b);
+        if (!cached.has(key) && !need.has(key)) need.set(key, b);
     }
 
+    const failed = new Set();
     if (need.size) {
         const sent = [...need.values()].map((b) => ({ text: b.text, words: b.words }));
         let resp = null;
@@ -169,25 +179,37 @@ async function handleGloss(blocks) {
 
         if (resp && resp.available === false) {
             modelAvailable = false;
+            checkedAt = Date.now();
             return { available: false, results: [] };
         }
         if (resp && Array.isArray(resp.results)) {
+            const ok = Array.isArray(resp.ok) ? resp.ok : [];
             sent.forEach((b, i) => {
+                if (ok[i] === false) {
+                    failed.add(keyOf(b));
+                    return;
+                }
                 const glosses = Array.isArray(resp.results[i]) ? resp.results[i] : [];
                 const value = {};
                 b.words.forEach((w, j) => {
                     value[w] = typeof glosses[j] === "string" ? glosses[j] : "";
                 });
-                cachePut(b.text, value);
-                cached.set(b.text, value);
+                cachePut(keyOf(b), value);
+                cached.set(keyOf(b), value);
             });
+            flushCache();
+        } else {
+            for (const b of sent) failed.add(keyOf(b));
         }
-        // On a transport error nothing is cached, so it can be retried later.
     }
 
     return {
         available: true,
-        results: blocks.map((b) => (b && cached.get(b.text)) || {})
+        results: blocks.map((b) => {
+            if (!b || !Array.isArray(b.words)) return {};
+            if (failed.has(keyOf(b))) return null;
+            return cached.get(keyOf(b)) || {};
+        })
     };
 }
 

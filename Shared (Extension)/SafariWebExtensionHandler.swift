@@ -6,7 +6,10 @@
 //
 
 import SafariServices
-import os.log
+import Synchronization
+import os
+
+private let logger = Logger(subsystem: "mannychau.Lithuanify.Extension", category: "gloss")
 
 #if canImport(FoundationModels)
 import FoundationModels
@@ -22,13 +25,7 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
 
     func beginRequest(with context: NSExtensionContext) {
         let request = context.inputItems.first as? NSExtensionItem
-
-        let message: Any?
-        if #available(iOS 15.0, macOS 11.0, *) {
-            message = request?.userInfo?[SFExtensionMessageKey]
-        } else {
-            message = request?.userInfo?["message"]
-        }
+        let message = request?.userInfo?[SFExtensionMessageKey]
 
         guard let dict = message as? [String: Any],
               let command = dict["command"] as? String else {
@@ -42,11 +39,11 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             complete(context, with: ["available": Self.modelIsAvailable()])
 
         case "gloss":
-            let raw = (dict["blocks"] as? [[String: Any]]) ?? []
-            let blocks = raw.compactMap { item -> GlossBlock? in
-                guard let text = item["text"] as? String,
-                      let words = item["words"] as? [String] else { return nil }
-                return GlossBlock(text: text, words: words)
+            let raw = (dict["blocks"] as? [Any]) ?? []
+            let blocks = raw.map { entry -> GlossBlock in
+                let item = entry as? [String: Any]
+                return GlossBlock(text: item?["text"] as? String ?? "",
+                                  words: item?["words"] as? [String] ?? [])
             }
             handleGloss(blocks: blocks, context: context)
 
@@ -59,11 +56,7 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
 
     private func complete(_ context: NSExtensionContext, with payload: [String: Any]) {
         let response = NSExtensionItem()
-        if #available(iOS 15.0, macOS 11.0, *) {
-            response.userInfo = [ SFExtensionMessageKey: payload ]
-        } else {
-            response.userInfo = [ "message": payload ]
-        }
+        response.userInfo = [SFExtensionMessageKey: payload]
         context.completeRequest(returningItems: [ response ], completionHandler: nil)
     }
 
@@ -88,13 +81,12 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
     }
 
     /// Gloss the unknown words of each block. Replies with one array of
-    /// meanings per block, aligned with that block's `words` ("" = no meaning).
     private func handleGloss(blocks: [GlossBlock], context: NSExtensionContext) {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, macOS 26.0, *), SystemLanguageModel.default.isAvailable {
             Task {
-                let results = await Glosser.gloss(blocks)
-                self.complete(context, with: ["available": true, "results": results])
+                let (results, ok) = await Glosser.gloss(blocks)
+                self.complete(context, with: ["available": true, "results": results, "ok": ok])
             }
             return
         }
@@ -108,32 +100,30 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
 /// Holds one prewarmed session. Each request takes it (so two requests never
 /// share a session) and a fresh warm one is parked for the next request.
 @available(iOS 26.0, macOS 26.0, *)
-final class SessionPool: @unchecked Sendable {
+final class SessionPool: Sendable {
     static let shared = SessionPool()
 
-    private let lock = NSLock()
-    private var warm: LanguageModelSession?
+    private let warm = Mutex<LanguageModelSession?>(nil)
 
     static func makeSession() -> LanguageModelSession {
-        LanguageModelSession(instructions: Glosser.instructions)
+        LanguageModelSession(
+            model: SystemLanguageModel(guardrails: .permissiveContentTransformations),
+            instructions: Glosser.instructions
+        )
     }
 
     func take() -> LanguageModelSession {
-        lock.lock()
-        let session = warm
-        warm = nil
-        lock.unlock()
-        return session ?? Self.makeSession()
+        warm.withLock { $0.take() } ?? Self.makeSession()
     }
 
     func fillIfEmpty() {
         guard SystemLanguageModel.default.isAvailable else { return }
-        lock.lock()
-        defer { lock.unlock() }
-        guard warm == nil else { return }
-        let session = Self.makeSession()
-        session.prewarm()
-        warm = session
+        warm.withLock { warm in
+            guard warm == nil else { return }
+            let session = Self.makeSession()
+            session.prewarm()
+            warm = session
+        }
     }
 }
 
@@ -144,8 +134,10 @@ enum Glosser {
     You help an English speaker read Lithuanian. The user gives a Lithuanian \
     text and a numbered list of words from it. For each numbered word, give a \
     short English meaning (1-3 words) that fits how the word is used in the \
-    text. Reply with the word's number and its meaning only. Never repeat the \
-    Lithuanian word.
+    text. Reply with one line per word: its number, a period, and the \
+    meaning. Never repeat the Lithuanian word. Example:
+    1. house
+    2. went
     """
 
     /// Words per model call. Small calls keep each answer short and complete.
@@ -163,10 +155,11 @@ enum Glosser {
         var targets: [(block: Int, word: Int, text: String)] = []
     }
 
-    static func gloss(_ blocks: [GlossBlock]) async -> [[String]] {
+    static func gloss(_ blocks: [GlossBlock]) async -> (results: [[String]], ok: [Bool]) {
         var results = blocks.map { Array(repeating: "", count: $0.words.count) }
+        var ok = Array(repeating: true, count: blocks.count)
         let jobs = makeJobs(blocks)
-        guard !jobs.isEmpty else { return results }
+        guard !jobs.isEmpty else { return (results, ok) }
 
         var session = SessionPool.shared.take()
         var turns = 0
@@ -176,30 +169,33 @@ enum Glosser {
                 session = SessionPool.makeSession()
                 turns = 0
             }
-            var items = await run(job, on: session, includeSchema: turns == 0)
+            var items = await run(job, on: session)
             turns += 1
             if items == nil && turns > 1 {
                 // A reused session may have run out of context; retry fresh.
                 session = SessionPool.makeSession()
-                turns = 0
-                items = await run(job, on: session, includeSchema: true)
+                items = await run(job, on: session)
                 turns = 1
             }
-            for item in items ?? [] {
+            guard let items else {
+                for target in job.targets { ok[target.block] = false }
+                continue
+            }
+            for item in items {
                 let index = item.i - 1
                 guard job.targets.indices.contains(index) else { continue }
-                let meaning = item.g.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !meaning.isEmpty else { continue }
                 let target = job.targets[index]
+                let meaning = clean(item.g, word: target.text)
+                guard !meaning.isEmpty else { continue }
                 results[target.block][target.word] = meaning
             }
         }
 
         SessionPool.shared.fillIfEmpty()
-        return results
+        return (results, ok)
     }
 
-    private static func run(_ job: Job, on session: LanguageModelSession, includeSchema: Bool) async -> [WordGloss]? {
+    private static func run(_ job: Job, on session: LanguageModelSession) async -> [WordGloss]? {
         var prompt = "Text:\n\(job.context.joined(separator: " "))\n\nWords:\n"
         for (n, target) in job.targets.enumerated() {
             prompt += "\(n + 1). \(target.text)\n"
@@ -207,15 +203,50 @@ enum Glosser {
         do {
             let response = try await session.respond(
                 to: prompt,
-                generating: GlossBatch.self,
-                includeSchemaInPrompt: includeSchema,
-                options: GenerationOptions(sampling: .greedy)
+                options: GenerationOptions(samplingMode: .greedy)
             )
-            return response.content.items
+            logger.debug("Model answer: \(response.content, privacy: .public)")
+            return parse(response.content)
         } catch {
-            os_log(.error, "Lithuanify gloss failed: %@", String(describing: error))
+            logger.error("Gloss failed: \(String(describing: error), privacy: .public)")
             return nil
         }
+    }
+
+    static func parse(_ text: String) -> [WordGloss] {
+        var out: [WordGloss] = []
+        for line in text.split(whereSeparator: \.isNewline) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let digits = trimmed.prefix(while: { $0.isNumber })
+            guard let i = Int(digits) else { continue }
+            var rest = trimmed.dropFirst(digits.count).drop(while: { ".):-= \t".contains($0) })
+            if let sep = rest.range(of: " - ") ?? rest.range(of: " = ") ?? rest.range(of: ": ") {
+                rest = rest[sep.upperBound...]
+            }
+            var gloss = rest.trimmingCharacters(in: .whitespaces)
+            while let last = gloss.last, ".,;".contains(last) { gloss.removeLast() }
+            if !gloss.isEmpty { out.append(WordGloss(i: i, g: gloss)) }
+        }
+        return out
+    }
+
+    static let maxGlossWords = 3
+
+    static func clean(_ gloss: String, word: String) -> String {
+        let source = fold(word)
+        let parts = gloss
+            .components(separatedBy: ". ")
+            .map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)) }
+            .filter { !$0.isEmpty }
+        let english = parts.filter { part in
+            !fold(part).split(whereSeparator: { !$0.isLetter }).contains { String($0) == source }
+        }
+        let pick = english.last ?? parts.last ?? ""
+        return pick.split(separator: " ").prefix(maxGlossWords).joined(separator: " ")
+    }
+
+    private static func fold(_ text: String) -> String {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
     }
 
     /// Split each block into sentences, give each unknown word the sentence it
@@ -302,22 +333,8 @@ enum Glosser {
     }
 }
 
-/// Output is the word's number and its meaning only; the model never re-types
-/// the Lithuanian word, which keeps output tokens (the slow part) low.
-@available(iOS 26.0, macOS 26.0, *)
-@Generable
 struct WordGloss {
-    @Guide(description: "The word's number from the list")
     let i: Int
-
-    @Guide(description: "Short English meaning (1-3 words) fitting this context")
     let g: String
-}
-
-@available(iOS 26.0, macOS 26.0, *)
-@Generable
-struct GlossBatch {
-    @Guide(description: "One entry per numbered word, in order")
-    let items: [WordGloss]
 }
 #endif

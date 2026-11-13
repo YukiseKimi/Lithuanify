@@ -23,6 +23,7 @@ h1 {
 
 /* Toggle switch */
 .toggle {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -31,7 +32,16 @@ h1 {
 }
 
 .toggle input {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    opacity: 0;
+}
+
+.toggle input:focus-visible + .track {
+    outline: 2px solid #1a73e8;
+    outline-offset: 2px;
 }
 
 .track {
@@ -69,8 +79,25 @@ h1 {
     text-align: left;
 }
 
-.cloud-row {
+.ai-row {
     margin-top: 12px;
+}
+
+.mode-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.mode-row select {
+    font: inherit;
+    font-size: 12px;
+}
+
+.mode-row select:disabled {
+    opacity: 0.4;
 }
 
 .row-label {

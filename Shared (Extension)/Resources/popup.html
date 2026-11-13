@@ -7,7 +7,7 @@
 </head>
 <body>
     <h1>Lithuanify</h1>
-    <p class="subtitle">Lithuanian → English furigana</p>
+    <p class="subtitle" data-i18n="popup_subtitle">Lithuanian → English furigana</p>
 
     <label class="toggle">
         <input type="checkbox" id="toggle" checked>
@@ -15,14 +15,23 @@
         <span id="state-label">On</span>
     </label>
 
-    <label class="toggle cloud-row">
+    <label class="toggle ai-row">
         <input type="checkbox" id="smart" checked>
         <span class="track"><span class="thumb"></span></span>
-        <span class="row-label">On-device AI</span>
+        <span class="row-label" data-i18n="popup_ai">On-device AI</span>
+    </label>
+
+    <label class="mode-row">
+        <span class="row-label" data-i18n="popup_translate">Translate</span>
+        <select id="mode">
+            <option value="page" data-i18n="popup_mode_page">Whole page</option>
+            <option value="hover" data-i18n="popup_mode_hover">Paragraph under pointer</option>
+            <option value="select" data-i18n="popup_mode_select">Selected text</option>
+        </select>
     </label>
 
     <p id="model-status" class="status"></p>
 
-    <p class="hint">Translations appear in small letters above recognised Lithuanian words. On-device AI uses Apple Intelligence for context-aware meanings — private and free. Dictionary meanings appear instantly; the AI fills in the rest. Nothing leaves your device.</p>
+    <p class="hint" data-i18n="popup_hint">Translations appear in small letters above recognised Lithuanian words. Choose whether to translate the whole page, only the paragraph you rest the pointer on, or only text you highlight. On-device AI uses Apple Intelligence for context-aware meanings — private and free. Dictionary meanings appear instantly; the AI fills in the rest. Nothing leaves your device.</p>
 </body>
 </html>

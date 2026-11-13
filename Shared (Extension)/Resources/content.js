@@ -136,21 +136,24 @@ const FURIGANA_CSS = `
 ruby.lithuanify-ruby {
     ruby-position: over;
     ruby-align: center;
-    margin: 0 0.12em;
+    margin: 0 0.1em;
 }
 ruby.lithuanify-ruby > rt {
-    /* Scale with the text, but never shrink below a readable floor. */
-    font-size: max(0.78em, 12px);
-    line-height: 1.25;
-    color: #1559c4;
-    font-weight: 600;
+    font-size: max(0.6em, 10px);
+    line-height: 1.2;
+    color: inherit;
+    opacity: 0.75;
+    font-weight: 500;
     font-family: system-ui, -apple-system, sans-serif;
-    letter-spacing: 0.01em;
+    letter-spacing: 0;
+    padding: 0 0.2em 1px;
     user-select: none;
-    padding-bottom: 1px;
 }
-@media (prefers-color-scheme: dark) {
-    ruby.lithuanify-ruby > rt { color: #9cc1ff; }
+@supports (color: color-mix(in srgb, red, blue)) {
+    ruby.lithuanify-ruby > rt {
+        color: color-mix(in srgb, currentColor 65%, #3b82f6);
+        opacity: 1;
+    }
 }`;
 
 function injectStyles() {
@@ -176,12 +179,14 @@ const REFINE_MAX_WORDS = 40;   // unknown words per on-device model request
 
 let enabled = true;          // master on/off
 let smartEnabled = true;     // use on-device AI for words the dictionary doesn't know
+let mode = "page";
 let modelAvailable = false;  // on-device model usable on this device
 let pageIsLithuanian = false;
 let generation = 0;          // bumped on disable, so in-flight work is dropped
 
 // Text nodes Lithuanify split off itself. They are never re-scanned.
 let ownNodes = new WeakSet();
+let contextOf = new WeakMap();
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
@@ -281,7 +286,7 @@ function renderBlock(node) {
         }
     });
 
-    const record = { node, text, unknown, parts: null };
+    const record = { node, text, context: contextOf.get(node) || text, unknown, parts: null };
     if (glosses.some(Boolean)) {
         record.parts = splitNode(node, tokens, glosses);
     } else {
@@ -361,6 +366,7 @@ const refineQueue = [];
 let rendering = false;
 let refining = false;
 let enqueueSeq = 0;
+let onDemandCount = 0;
 let viewportObserver = null;
 
 // Translation priority by where an element sits in the page:
@@ -439,9 +445,10 @@ function finishItem(item) {
 
 // Register text nodes. Everything is queued immediately; the visible-first
 // ordering decides what is done soonest.
-function scheduleTextNodes(textNodes) {
+function scheduleTextNodes(textNodes, onDemand = false) {
     if (!textNodes.length) return;
     ensureViewportObserver();
+    const demandSeq = onDemand ? -(++onDemandCount) : 0;
     for (const node of textNodes) {
         const el = node.parentElement;
         if (!el) continue;
@@ -449,9 +456,9 @@ function scheduleTextNodes(textNodes) {
         if (!item) {
             item = {
                 el,
-                priority: priorityFor(el),
-                seq: enqueueSeq++,
-                visible: isInViewport(el),
+                priority: onDemand ? -1 : priorityFor(el),
+                seq: onDemand ? demandSeq : enqueueSeq++,
+                visible: onDemand || isInViewport(el),
                 nodes: new Set(),
                 records: null
             };
@@ -544,7 +551,7 @@ async function pumpRefine() {
             sortQueue(refineQueue);
             const batch = takeRefineBatch();
             const records = batch.flatMap((item) => item.records);
-            const blocks = records.map((r) => ({ text: r.text, words: r.unknown }));
+            const blocks = records.map((r) => ({ text: r.context, words: r.unknown }));
 
             let res = null;
             try {
@@ -560,11 +567,24 @@ async function pumpRefine() {
                 refineQueue.splice(0).forEach(finishItem);
                 break;
             }
-            const results = (res && Array.isArray(res.results)) ? res.results : [];
+            const results = (res && Array.isArray(res.results)) ? res.results : null;
+            const failed = new Set();
             records.forEach((record, i) => {
-                if (results[i]) applyRefinement(record, results[i]);
+                const glosses = results ? results[i] : null;
+                if (glosses) applyRefinement(record, glosses);
+                else failed.add(record);
             });
-            batch.forEach(finishItem);
+            for (const item of batch) {
+                const left = item.records.filter((r) => failed.has(r));
+                if (left.length && !item.retried) {
+                    item.retried = true;
+                    item.records = left;
+                    item.seq = enqueueSeq++;
+                    refineQueue.push(item);
+                } else {
+                    finishItem(item);
+                }
+            }
             logTiming("first AI gloss");
         }
         if (!refineQueue.length && !renderQueue.length) logTiming("AI pass done");
@@ -607,6 +627,7 @@ function removeAnnotations() {
     // Merge the split-up text nodes back together.
     parents.forEach((p) => p.normalize());
     ownNodes = new WeakSet();
+    contextOf = new WeakMap();
 }
 
 // Heuristic: is this page (mostly) Lithuanian? Non-Lithuanian pages are left
@@ -626,6 +647,124 @@ function detectLithuanian() {
         }
     }
     return hits / words.length > 0.15;
+}
+
+const HOVER_DELAY_MS = 300;
+const SELECT_DELAY_MS = 500;
+let requestedBlocks = new WeakSet();
+let hoverTimer = null;
+let selectTimer = null;
+let pointerDown = false;
+
+function isInlineDisplay(el) {
+    const display = getComputedStyle(el).display;
+    return display === "inline" || display === "contents" || display.startsWith("ruby");
+}
+
+function blockFor(node) {
+    let el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    while (el && el !== document.body && el !== document.documentElement) {
+        if (!isInlineDisplay(el)) return el;
+        el = el.parentElement;
+    }
+    return null;
+}
+
+function glossBlock(block) {
+    if (!enabled || !block || requestedBlocks.has(block)) return;
+    requestedBlocks.add(block);
+    const nodes = [];
+    collectTextNodes(block, nodes);
+    scheduleTextNodes(nodes.filter((n) => blockFor(n) === block), true);
+}
+
+function onMouseOver(event) {
+    clearTimeout(hoverTimer);
+    const target = event.target;
+    hoverTimer = setTimeout(() => glossBlock(blockFor(target)), HOVER_DELAY_MS);
+}
+
+function onMouseOut(event) {
+    if (!event.relatedTarget) clearTimeout(hoverTimer);
+}
+
+const isLetter = (ch) => WORD_RE.test(ch);
+
+function cutSelected(node, range) {
+    const text = node.nodeValue;
+    let start = node === range.startContainer ? range.startOffset : 0;
+    let end = node === range.endContainer ? range.endOffset : text.length;
+    while (start > 0 && isLetter(text[start - 1]) && isLetter(text[start])) start--;
+    while (end < text.length && end > 0 && isLetter(text[end - 1]) && isLetter(text[end])) end++;
+    if (!WORD_RE.test(text.slice(start, end))) return null;
+
+    const context = contextOf.get(node) || text;
+    const piece = start > 0 ? node.splitText(start) : node;
+    if (end - start < piece.nodeValue.length) piece.splitText(end - start);
+    contextOf.set(piece, context);
+    return piece;
+}
+
+function glossSelection() {
+    const sel = document.getSelection();
+    if (!enabled || !sel || sel.isCollapsed) return;
+    const pieces = [];
+    for (let i = 0; i < sel.rangeCount; i++) {
+        const range = sel.getRangeAt(i);
+        const root = range.commonAncestorContainer;
+        const nodes = [];
+        if (root.nodeType === Node.TEXT_NODE) {
+            if (isProcessable(root)) nodes.push(root);
+        } else {
+            collectTextNodes(root, nodes);
+        }
+        for (const n of nodes) {
+            if (!range.intersectsNode(n)) continue;
+            const piece = cutSelected(n, range);
+            if (piece) pieces.push(piece);
+        }
+    }
+    scheduleTextNodes(pieces, true);
+}
+
+function onPointerDown() {
+    pointerDown = true;
+    clearTimeout(selectTimer);
+}
+
+function onPointerUp() {
+    pointerDown = false;
+    clearTimeout(selectTimer);
+    selectTimer = setTimeout(glossSelection, 50);
+}
+
+function onSelectionChange() {
+    if (pointerDown) return;
+    clearTimeout(selectTimer);
+    selectTimer = setTimeout(glossSelection, SELECT_DELAY_MS);
+}
+
+function startOnDemand() {
+    if (mode === "hover") {
+        document.addEventListener("mouseover", onMouseOver, true);
+        document.addEventListener("mouseout", onMouseOut, true);
+    } else if (mode === "select") {
+        document.addEventListener("mousedown", onPointerDown, true);
+        document.addEventListener("mouseup", onPointerUp, true);
+        document.addEventListener("selectionchange", onSelectionChange);
+    }
+}
+
+function stopOnDemand() {
+    clearTimeout(hoverTimer);
+    clearTimeout(selectTimer);
+    pointerDown = false;
+    document.removeEventListener("mouseover", onMouseOver, true);
+    document.removeEventListener("mouseout", onMouseOut, true);
+    document.removeEventListener("mousedown", onPointerDown, true);
+    document.removeEventListener("mouseup", onPointerUp, true);
+    document.removeEventListener("selectionchange", onSelectionChange);
+    requestedBlocks = new WeakSet();
 }
 
 // Batch dynamic mutations.
@@ -677,7 +816,7 @@ async function enable() {
     t0 = performance.now();
     timingLogged.clear();
     pageIsLithuanian = detectLithuanian();
-    if (!pageIsLithuanian) return;
+    if (!pageIsLithuanian && mode !== "select") return;
 
     injectStyles();
     const gen = generation;
@@ -690,8 +829,12 @@ async function enable() {
         }
     }
     if (gen !== generation || !enabled) return;  // disabled while waiting
-    annotateRoots([document.body]);
-    startObserver();
+    if (mode === "page") {
+        annotateRoots([document.body]);
+        startObserver();
+    } else {
+        startOnDemand();
+    }
 }
 
 function disable() {
@@ -700,6 +843,7 @@ function disable() {
     rendering = false;
     refining = false;
     stopObserver();
+    stopOnDemand();
     if (viewportObserver) {
         viewportObserver.disconnect();
         viewportObserver = null;
@@ -713,12 +857,12 @@ function disable() {
     removeAnnotations();
 }
 
-// Load preferences (both default to on) and start.
 async function init() {
     try {
-        const result = await browser.storage.local.get(["enabled", "smart"]);
+        const result = await browser.storage.local.get(["enabled", "smart", "mode"]);
         enabled = result.enabled !== false;
         smartEnabled = result.smart !== false;
+        if (["page", "hover", "select"].includes(result.mode)) mode = result.mode;
     } catch (e) {
         enabled = true;
         smartEnabled = true;
@@ -746,8 +890,16 @@ browser.runtime.onMessage.addListener((request) => {
         }
         return Promise.resolve({ smart: smartEnabled });
     }
+    if (request.command === "setMode") {
+        if (["page", "hover", "select"].includes(request.mode)) mode = request.mode;
+        if (enabled) {
+            disable();
+            enable();
+        }
+        return Promise.resolve({ mode });
+    }
     if (request.command === "status") {
-        return Promise.resolve({ enabled, smart: smartEnabled, modelAvailable });
+        return Promise.resolve({ enabled, smart: smartEnabled, mode, modelAvailable });
     }
 });
 

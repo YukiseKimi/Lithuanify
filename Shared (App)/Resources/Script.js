@@ -17,6 +17,10 @@ function show(platform, enabled, useSettingsInsteadOfPreferences) {
     }
 }
 
+function showOpenError() {
+    document.querySelector(".open-error").hidden = false;
+}
+
 function openPreferences() {
     webkit.messageHandlers.controller.postMessage("open-preferences");
 }

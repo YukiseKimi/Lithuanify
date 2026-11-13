@@ -42,37 +42,33 @@ class ViewController: PlatformViewController, WKNavigationDelegate, WKScriptMess
 #elseif os(macOS)
         webView.evaluateJavaScript("show('mac')")
 
-        SFSafariExtensionManager.getStateOfSafariExtension(withIdentifier: extensionBundleIdentifier) { (state, error) in
-            guard let state = state, error == nil else {
-                // Insert code to inform the user that something went wrong.
+        Task {
+            guard let state = try? await SFSafariExtensionManager.stateOfSafariExtension(withIdentifier: extensionBundleIdentifier) else {
                 return
             }
-
-            DispatchQueue.main.async {
-                if #available(macOS 13, *) {
-                    webView.evaluateJavaScript("show('mac', \(state.isEnabled), true)")
-                } else {
-                    webView.evaluateJavaScript("show('mac', \(state.isEnabled), false)")
-                }
+            let useSettings: Bool
+            if #available(macOS 13, *) {
+                useSettings = true
+            } else {
+                useSettings = false
             }
+            webView.evaluateJavaScript("show('mac', \(state.isEnabled), \(useSettings))", completionHandler: nil)
         }
 #endif
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
 #if os(macOS)
-        if (message.body as! String != "open-preferences") {
+        guard message.body as? String == "open-preferences" else {
             return
         }
 
-        SFSafariApplication.showPreferencesForExtension(withIdentifier: extensionBundleIdentifier) { error in
-            guard error == nil else {
-                // Insert code to inform the user that something went wrong.
-                return
-            }
-
-            DispatchQueue.main.async {
+        Task {
+            do {
+                try await SFSafariApplication.showPreferencesForExtension(withIdentifier: extensionBundleIdentifier)
                 NSApp.terminate(self)
+            } catch {
+                webView.evaluateJavaScript("showOpenError()", completionHandler: nil)
             }
         }
 #endif

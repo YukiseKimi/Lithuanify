@@ -6,5 +6,49 @@
     "extension_description": {
         "message": "Shows English translations in small letters above Lithuanian words, like furigana.",
         "description": "Description of what the extension does."
+    },
+    "popup_subtitle": {
+        "message": "Lithuanian → English furigana",
+        "description": "Popup: line under the extension name."
+    },
+    "popup_on": {
+        "message": "On",
+        "description": "Popup: state of the main switch when the extension is on."
+    },
+    "popup_off": {
+        "message": "Off",
+        "description": "Popup: state of the main switch when the extension is off."
+    },
+    "popup_ai": {
+        "message": "On-device AI",
+        "description": "Popup: label of the switch for Apple Intelligence glosses."
+    },
+    "popup_translate": {
+        "message": "Translate",
+        "description": "Popup: label of the menu that picks what gets translated."
+    },
+    "popup_mode_page": {
+        "message": "Whole page",
+        "description": "Popup: translate mode, every word on the page."
+    },
+    "popup_mode_hover": {
+        "message": "Paragraph under pointer",
+        "description": "Popup: translate mode, the paragraph the pointer rests on."
+    },
+    "popup_mode_select": {
+        "message": "Selected text",
+        "description": "Popup: translate mode, only text the user highlights."
+    },
+    "popup_ai_available": {
+        "message": "On-device AI: available",
+        "description": "Popup: status when Apple Intelligence can be used."
+    },
+    "popup_ai_unavailable": {
+        "message": "On-device AI unavailable — using the offline dictionary",
+        "description": "Popup: status when Apple Intelligence cannot be used."
+    },
+    "popup_hint": {
+        "message": "Translations appear in small letters above recognised Lithuanian words. Choose whether to translate the whole page, only the paragraph you rest the pointer on, or only text you highlight. On-device AI uses Apple Intelligence for context-aware meanings — private and free. Dictionary meanings appear instantly; the AI fills in the rest. Nothing leaves your device.",
+        "description": "Popup: explanation at the bottom."
     }
 }

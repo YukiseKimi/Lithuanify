@@ -39,6 +39,12 @@ look Lithuanian are left alone.
 ## Features
 
 - Furigana-style English glosses above Lithuanian words.
+- **Three translate modes**, picked in the toolbar popup:
+  - *Whole page*: every word, on-screen text first.
+  - *Paragraph under pointer*: only the paragraph the pointer rests on.
+  - *Selected text*: only the words you highlight. This also works on pages
+    that don't look Lithuanian. On iPhone and iPad, where there is no hover,
+    this is the mode to use.
 - Context-aware meanings via the on-device language model.
 - **Priority + visible-first scheduling:** on-screen text translates first, then
   the rest fills in by priority (title → body → navigation/menus last).
@@ -47,8 +53,8 @@ look Lithuanian are left alone.
   session is reused per request; a persistent IndexedDB gloss cache makes
   revisits instant. Timings are logged to the Web Inspector console.
 - Diacritic-insensitive dictionary matching.
-- Toolbar popup to toggle the extension and the on-device AI on/off, and to see
-  whether the on-device model is available.
+- Toolbar popup to toggle the extension and the on-device AI on/off, pick the
+  translate mode, and see whether the on-device model is available.
 
 ## Project layout
 
