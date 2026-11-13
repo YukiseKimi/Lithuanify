@@ -56,6 +56,7 @@ const REFINE_MAX_WORDS = 40;   // unknown words per on-device model request
 let enabled = true;          // master on/off
 let smartEnabled = true;     // use on-device AI for words the dictionary doesn't know
 let mode = "page";
+let hideCommon = 0;          // hide the glosses of words ranked this common or more
 let modelAvailable = false;  // on-device model usable on this device
 let pageIsLithuanian = false;
 let generation = 0;          // bumped on disable, so in-flight work is dropped
@@ -74,6 +75,11 @@ let meanings = new Map();
 
 function entryFor(word) {
     return meanings.get(phraseKey(word)) || null;
+}
+
+function isHidden(word) {
+    const entry = entryFor(word);
+    return !!entry && entry.r > 0 && entry.r <= hideCommon;
 }
 
 function dictLookup(word) {
@@ -217,13 +223,15 @@ function splitNode(node, tokens, glosses, picks = new Set()) {
 function renderBlock(node) {
     const text = node.nodeValue;
     const tokens = mergePhrases(text.match(TOKEN_RE) || []);
-    const glosses = tokens.map((t) => (isWordToken(t) ? dictLookup(t) : null));
+    const hidden = tokens.map((t) => isWordToken(t) && isHidden(t));
+    const glosses = tokens.map((t, i) => (isWordToken(t) && !hidden[i] ? dictLookup(t) : null));
 
     const unknown = [];
     const picks = new Set();
     const seen = new Set();
     tokens.forEach((t, i) => {
         const pick = glosses[i] && needsPick(t);
+        if (hidden[i]) return;
         if (!pick && (!isCandidate(t, glosses[i]) || isName(tokens, i))) return;
         const lower = t.toLowerCase();
         if (pick) picks.add(lower);
@@ -251,7 +259,7 @@ function applyRefinement(record, glossMap) {
         if (!node.parentNode || node.nodeValue !== record.text) return;
         const tokens = record.text.match(TOKEN_RE) || [];
         const glosses = tokens.map((t) =>
-            (isWordToken(t) ? (dictLookup(t) || glossMap[t.toLowerCase()] || null) : null));
+            (isWordToken(t) && !isHidden(t) ? (dictLookup(t) || glossMap[t.toLowerCase()] || null) : null));
         if (glosses.some(Boolean)) record.parts = splitNode(node, tokens, glosses);
         return;
     }
@@ -858,9 +866,10 @@ function disable() {
 
 async function init() {
     try {
-        const result = await browser.storage.local.get(["enabled", "smart", "mode"]);
+        const result = await browser.storage.local.get(["enabled", "smart", "mode", "hideCommon"]);
         enabled = result.enabled !== false;
         smartEnabled = result.smart !== false;
+        hideCommon = Number(result.hideCommon) || 0;
         if (["page", "hover", "select"].includes(result.mode)) mode = result.mode;
     } catch (e) {
         enabled = true;
@@ -896,6 +905,14 @@ browser.runtime.onMessage.addListener((request) => {
             enable();
         }
         return Promise.resolve({ mode });
+    }
+    if (request.command === "setHideCommon") {
+        hideCommon = Number(request.hideCommon) || 0;
+        if (enabled) {
+            disable();
+            enable();
+        }
+        return Promise.resolve({ hideCommon });
     }
     if (request.command === "status") {
         return Promise.resolve({ enabled, smart: smartEnabled, mode, modelAvailable });

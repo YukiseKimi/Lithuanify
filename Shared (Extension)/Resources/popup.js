@@ -6,6 +6,7 @@ const stateLabel = document.getElementById("state-label");
 const smart = document.getElementById("smart");
 const modelStatus = document.getElementById("model-status");
 const mode = document.getElementById("mode");
+const hideCommon = document.getElementById("hide-common");
 
 const t = (key, fallback) => browser.i18n.getMessage(key) || fallback;
 
@@ -18,12 +19,14 @@ function renderEnabled(enabled) {
     stateLabel.textContent = enabled ? t("popup_on", "On") : t("popup_off", "Off");
     smart.disabled = !enabled;
     mode.disabled = !enabled;
+    hideCommon.disabled = !enabled;
 }
 
-browser.storage.local.get(["enabled", "smart", "mode"]).then((result) => {
+browser.storage.local.get(["enabled", "smart", "mode", "hideCommon"]).then((result) => {
     renderEnabled(result.enabled !== false);
     smart.checked = result.smart !== false;
     mode.value = result.mode || "page";
+    hideCommon.value = String(Number(result.hideCommon) || 0);
 });
 
 // Show on-device model availability.
@@ -55,6 +58,12 @@ toggle.addEventListener("change", async () => {
 mode.addEventListener("change", async () => {
     await browser.storage.local.set({ mode: mode.value });
     await sendToActiveTab({ command: "setMode", mode: mode.value });
+});
+
+hideCommon.addEventListener("change", async () => {
+    const value = Number(hideCommon.value) || 0;
+    await browser.storage.local.set({ hideCommon: value });
+    await sendToActiveTab({ command: "setHideCommon", hideCommon: value });
 });
 
 smart.addEventListener("change", async () => {

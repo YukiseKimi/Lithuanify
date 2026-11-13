@@ -200,7 +200,7 @@ test('two lemmas with the same headword give it both meanings', async () => {
 
 test('a lookup gives every meaning of a word and its lemma', async () => {
   const bg = load({ dictionary: 'braid|pancreas|cash register\tkasa\tkasos\n' })
-  assert.deepEqual(await bg.lookup(['kasos']), { kasos: { m: ['braid', 'pancreas', 'cash register'], l: 'kasa' } })
+  assert.deepEqual(await bg.lookup(['kasos']), { kasos: { m: ['braid', 'pancreas', 'cash register'], l: 'kasa', r: 0 } })
 })
 
 test('answers cached before the model could pick are not reused', async () => {
@@ -250,4 +250,10 @@ test('after a rate limit the model is not asked for a minute, and the page is to
   bg.state('pausedUntil = 0')
   const third = await bg.gloss([{ text: 'Karas tęsiasi.', words: ['karas'] }])
   assert.deepEqual(third.results, [{ karas: 'G:karas' }])
+})
+
+test('a lookup gives the frequency rank of a word', async () => {
+  const bg = load({ dictionary: 'and\tir\t\t\t1\nbook\tknyga\tknygą\tne\t40\nfire\tgaisras\tgaisro\n' })
+  const found = await bg.lookup(['ir', 'knygą', 'gaisro'])
+  assert.deepEqual([found.ir.r, found.knygą.r, found.gaisro.r], [1, 40, 0])
 })

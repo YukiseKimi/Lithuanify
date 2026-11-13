@@ -51,8 +51,24 @@
         "message": "Translations appear in small letters above recognised Lithuanian words. Choose whether to translate the whole page, only the paragraph you rest the pointer on, or only text you highlight. On-device AI uses Apple Intelligence for context-aware meanings — private and free. Dictionary meanings appear instantly; the AI fills in the rest. Nothing leaves your device.",
         "description": "Popup: explanation at the bottom."
     },
+    "popup_hide_common": {
+        "message": "Hide common words",
+        "description": "Popup: label of the menu that hides the meanings of the most common words."
+    },
+    "popup_hide_off": {
+        "message": "Off",
+        "description": "Popup: hide-common-words option that shows every meaning."
+    },
+    "popup_hide_500": {
+        "message": "500 most common",
+        "description": "Popup: hide-common-words option for the 500 most frequent words."
+    },
+    "popup_hide_2000": {
+        "message": "2,000 most common",
+        "description": "Popup: hide-common-words option for the 2,000 most frequent words."
+    },
     "popup_credits": {
-        "message": "Dictionary: Wiktionary (CC BY-SA 4.0) and the Hunspell lt_LT word list.",
+        "message": "Dictionary: Wiktionary (CC BY-SA 4.0), the Hunspell lt_LT word list and FrequencyWords (CC BY-SA 4.0).",
         "description": "Popup: credit line for the dictionary data."
     },
     "popup_credits_link": {

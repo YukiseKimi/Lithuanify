@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { expandHunspell, parseAffixes, readWiktionary, shortGloss, writeDictionary } from '../../scripts/build-dictionary.mjs'
+import { expandHunspell, parseAffixes, readFrequency, readWiktionary, shortGloss, writeDictionary } from '../../scripts/build-dictionary.mjs'
 
 const fixture = (name) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8')
 
@@ -45,4 +45,15 @@ test('the dictionary file has one line per lemma: gloss, lemma, every other form
     'nevertheless\tvis dėlto\t',
     ''
   ].join('\n'))
+})
+
+test('a lemma takes the best frequency rank of any of its forms', () => {
+  const lemmas = readWiktionary(fixture('wiktionary.jsonl').split('\n'))
+  const forms = expandHunspell(fixture('lt.dic'), parseAffixes(fixture('lt.aff')))
+  const ranks = readFrequency('ir 900\nknygą 500\ngaisras 10\nknyga 3\n')
+  assert.deepEqual([...ranks], [['ir', 1], ['knygą', 2], ['gaisras', 3], ['knyga', 4]])
+  const lines = writeDictionary(lemmas, forms, new Set(), ranks).split('\n')
+  assert.equal(lines[0], 'fire|conflagration|burning\tgaisras\tgaisro gaisrui gaisrą\t\t3')
+  assert.equal(lines[1], 'book|volume|ledger\tknyga\tknygoje knygomis knygos knygą\t\t2')
+  assert.equal(lines[2], 'read\tskaityti\tskaitau')
 })

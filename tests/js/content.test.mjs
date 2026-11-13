@@ -199,3 +199,13 @@ test('a paragraph far below the screen gets dictionary meanings but waits for th
   await waitFor(() => page.glosses().length === 5)
   assert.deepEqual(page.sent.flat().map((b) => b.text), ['Aš skaitau.', 'Aš rašau knygą.'])
 })
+
+test('hiding common words leaves a common word bare and does not send it to the model', async () => {
+  const page = await loadContent(lt('<p>Aš skaitau knygą.</p>'), {
+    hideCommon: 500,
+    dictionary: { aš: { m: ['I'], r: 2 }, skaitau: { m: ['read'], r: 300 }, knygą: { m: ['book'], r: 900 } }
+  })
+  await page.settle()
+  assert.deepEqual(page.glosses(), [['knygą', 'book']])
+  assert.equal(page.glossCalls(), 0)
+})

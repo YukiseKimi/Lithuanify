@@ -29,7 +29,7 @@ export async function waitFor(check, { timeout = 3000, every = 10 } = {}) {
 
 const sampleDictionary = { aš: 'I', knygą: 'book', knygoje: 'book' }
 
-export async function loadContent(html, { mode = 'page', modelAvailable = true, gloss = glossAll, dictionary = sampleDictionary, lookupFailures = 0, reply = null, offscreen = null } = {}) {
+export async function loadContent(html, { hideCommon = 0, mode = 'page', modelAvailable = true, gloss = glossAll, dictionary = sampleDictionary, lookupFailures = 0, reply = null, offscreen = null } = {}) {
   const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true })
   const { window } = dom
   open.add(window)
@@ -62,7 +62,7 @@ export async function loadContent(html, { mode = 'page', modelAvailable = true, 
     disconnect() { this.targets.clear(); observers.delete(this) }
   }
   window.browser = {
-    storage: { local: { get: async () => ({ mode }), set: async () => {} } },
+    storage: { local: { get: async () => ({ mode, hideCommon }), set: async () => {} } },
     runtime: {
       onMessage: { addListener() {} },
       sendMessage: async (message) => {
@@ -71,7 +71,7 @@ export async function loadContent(html, { mode = 'page', modelAvailable = true, 
           lookups.push(plain(message.words))
           if (lookups.length <= lookupFailures) throw new Error('background gone')
           return Object.fromEntries(message.words.filter((w) => w in dictionary)
-            .map((w) => [w, { m: [].concat(dictionary[w]), l: null }]))
+            .map((w) => [w, { m: [].concat(dictionary[w].m || dictionary[w]), l: null, r: dictionary[w].r || 0 }]))
         }
         if (message.command === 'gloss') {
           glossCalls += 1

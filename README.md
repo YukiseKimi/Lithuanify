@@ -109,6 +109,7 @@ The script downloads its sources into `build/dictionary` (about 85 MB, ignored b
 
 - English meanings and word forms: [Wiktionary](https://en.wiktionary.org), extracted by [Wiktextract](https://kaikki.org/dictionary/Lithuanian/), under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 - More word forms: the [Hunspell lt_LT](https://github.com/LibreOffice/dictionaries/tree/master/lt_LT) word list from LibreOffice, under the licence in `LICENSE-hunspell-lt.txt`.
+- Word frequency ranks: [FrequencyWords](https://github.com/hermitdave/FrequencyWords) by Hermit Dave, from OpenSubtitles, under CC BY-SA 4.0 (see `LICENSE-frequencywords.txt`). The popup's **Hide common words** setting uses them.
 
 ## Requirements
 

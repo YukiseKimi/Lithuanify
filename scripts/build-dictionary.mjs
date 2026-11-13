@@ -8,7 +8,9 @@ const SOURCES = {
   dic: 'https://raw.githubusercontent.com/LibreOffice/dictionaries/master/lt_LT/lt.dic',
   aff: 'https://raw.githubusercontent.com/LibreOffice/dictionaries/master/lt_LT/lt.aff',
   copying: 'https://raw.githubusercontent.com/LibreOffice/dictionaries/master/lt_LT/COPYING',
-  authors: 'https://raw.githubusercontent.com/LibreOffice/dictionaries/master/lt_LT/AUTHORS'
+  authors: 'https://raw.githubusercontent.com/LibreOffice/dictionaries/master/lt_LT/AUTHORS',
+  frequency: 'https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/lt/lt_50k.txt',
+  frequencyLicense: 'https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/LICENSE'
 }
 const MAX_GLOSS_WORDS = 3
 const MAX_MEANINGS = 3
@@ -137,14 +139,27 @@ export function expandHunspell(dicText, affixes, negatable = new Set()) {
   return forms
 }
 
-export function writeDictionary(lemmas, hunspellForms, negatable = new Set()) {
+export function readFrequency(text) {
+  const ranks = new Map()
+  for (const line of text.split(/\r?\n/)) {
+    const word = (line.split(' ')[0] || '').toLowerCase()
+    if (isWord(word) && !ranks.has(word)) ranks.set(word, ranks.size + 1)
+  }
+  return ranks
+}
+
+export function writeDictionary(lemmas, hunspellForms, negatable = new Set(), ranks = new Map()) {
   const lines = []
   for (const [lemma, { meanings, forms }] of [...lemmas].sort(([a], [b]) => a.localeCompare(b, 'lt'))) {
     const all = new Set(forms)
     for (const form of hunspellForms.get(lemma) || []) all.add(form)
     all.delete(lemma)
-    const columns = [meanings.map((m) => m.replace(/[\s|]+/g, ' ')).join('|'), lemma, [...all].sort().join(' ')]
-    if (negatable.has(lemma)) columns.push('ne')
+    const rank = Math.min(...[lemma, ...all].map((word) => ranks.get(word) || Infinity))
+    const columns = [
+      meanings.map((m) => m.replace(/[\s|]+/g, ' ')).join('|'), lemma, [...all].sort().join(' '),
+      negatable.has(lemma) ? 'ne' : '', Number.isFinite(rank) ? String(rank) : ''
+    ]
+    while (columns.length > 3 && !columns[columns.length - 1]) columns.pop()
     lines.push(columns.join('\t'))
   }
   return lines.join('\n') + '\n'
@@ -172,18 +187,27 @@ async function main() {
   await download(SOURCES.aff, work + 'lt.aff')
   await download(SOURCES.copying, work + 'COPYING')
   await download(SOURCES.authors, work + 'AUTHORS')
+  await download(SOURCES.frequency, work + 'lt_50k.txt')
+  await download(SOURCES.frequencyLicense, work + 'FrequencyWords-LICENSE')
 
   const lemmas = readWiktionary(await readLines(work + 'lithuanian.jsonl'))
   const affixes = parseAffixes(readFileSync(work + 'lt.aff', 'utf8'))
   const negatable = new Set()
   const forms = expandHunspell(readFileSync(work + 'lt.dic', 'utf8'), affixes, negatable)
-  const out = writeDictionary(lemmas, forms, negatable)
+  const ranks = readFrequency(readFileSync(work + 'lt_50k.txt', 'utf8'))
+  const out = writeDictionary(lemmas, forms, negatable, ranks)
 
   const target = root + 'Shared (Extension)/Resources/dictionary/'
   mkdirSync(target, { recursive: true })
   writeFileSync(target + 'lt-en.tsv', out)
   writeFileSync(target + 'LICENSE-hunspell-lt.txt',
     readFileSync(work + 'AUTHORS', 'utf8') + '\n' + readFileSync(work + 'COPYING', 'utf8'))
+  writeFileSync(target + 'LICENSE-frequencywords.txt', [
+    'Word frequency ranks: FrequencyWords by Hermit Dave (https://github.com/hermitdave/FrequencyWords),',
+    'from OpenSubtitles. Content under CC BY-SA 4.0; the repository licence follows.',
+    '',
+    readFileSync(work + 'FrequencyWords-LICENSE', 'utf8')
+  ].join('\n'))
   writeFileSync(target + 'LICENSE-wiktionary.txt', [
     'English meanings and word forms: Wiktionary (https://en.wiktionary.org),',
     'extracted by Wiktextract (https://kaikki.org/dictionary/Lithuanian/).',

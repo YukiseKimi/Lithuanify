@@ -281,14 +281,17 @@ function merge(a, b) {
     return {
         m: [...new Set([...a.m, ...b.m])].slice(0, MAX_OPTIONS),
         l: a.l === b.l ? a.l : null,
-        ne: a.ne && b.ne
+        ne: a.ne && b.ne,
+        r: a.r && b.r ? Math.min(a.r, b.r) : a.r || b.r
     };
 }
 
 function parseDictionary(text) {
     const byWord = new Map();
     const lemmas = text.split("\n").map((line) => line.split("\t")).filter((cols) => cols.length >= 2)
-        .map(([glosses, lemma, forms = "", ne]) => ({ lemma, forms, entry: { m: glosses.split("|"), l: lemma, ne: ne === "ne" } }));
+        .map(([glosses, lemma, forms = "", ne, rank]) => ({
+            lemma, forms, entry: { m: glosses.split("|"), l: lemma, ne: ne === "ne", r: Number(rank) || 0 }
+        }));
     const add = (word, entry) => {
         const known = byWord.get(word);
         byWord.set(word, known ? merge(known, entry) : entry);
@@ -336,11 +339,11 @@ const NEGATIONS = ["nebe", "ne"];
 
 function meaningOf(meanings, word) {
     const entry = entryOf(meanings, word);
-    if (entry) return { m: entry.m, l: entry.l };
+    if (entry) return { m: entry.m, l: entry.l, r: entry.r };
     for (const prefix of NEGATIONS) {
         if (!word.startsWith(prefix) || word.length <= prefix.length + 2) continue;
         const base = entryOf(meanings, word.slice(prefix.length));
-        if (base && base.ne) return { m: base.m.map((meaning) => "not " + meaning), l: base.l };
+        if (base && base.ne) return { m: base.m.map((meaning) => "not " + meaning), l: base.l, r: 0 };
     }
     return null;
 }
