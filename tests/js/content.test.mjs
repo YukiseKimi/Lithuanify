@@ -90,3 +90,16 @@ test('hover mode glosses a paragraph again after its text changes', async () => 
   await page.settle()
   assert.deepEqual(page.glosses(), [['Karas', 'G:karas'], ['tęsiasi', 'G:tęsiasi']])
 })
+
+test('an inflected form gets its dictionary meaning from one lookup, and the model gets only the rest', async () => {
+  let answer
+  const reply = new Promise((resolve) => { answer = resolve })
+  const page = await loadContent(lt('<p id="p">Aš skaitau knygoje.</p><p>Knygoje gaisras.</p>'), { gloss: () => reply })
+
+  await waitFor(() => page.glossCalls() === 1)
+  assert.deepEqual(page.glosses(), [['Aš', 'I'], ['knygoje', 'book'], ['Knygoje', 'book']])
+  assert.deepEqual(page.lookups, [['aš', 'skaitau', 'knygoje', 'gaisras']])
+  assert.deepEqual(page.sent[0].map((b) => b.words), [['skaitau'], ['gaisras']])
+  answer([{ skaitau: 'G:skaitau' }, { gaisras: 'G:gaisras' }])
+  await page.settle()
+})

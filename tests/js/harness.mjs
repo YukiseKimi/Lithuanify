@@ -27,11 +27,14 @@ export async function waitFor(check, { timeout = 3000, every = 10 } = {}) {
   throw new Error(`waitFor timed out after ${timeout} ms`)
 }
 
-export async function loadContent(html, { mode = 'page', modelAvailable = true, gloss = glossAll } = {}) {
+const sampleDictionary = { aš: 'I', knygą: 'book', knygoje: 'book' }
+
+export async function loadContent(html, { mode = 'page', modelAvailable = true, gloss = glossAll, dictionary = sampleDictionary } = {}) {
   const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true })
   const { window } = dom
   open.add(window)
   const sent = []
+  const lookups = []
   let glossCalls = 0
 
   window.IntersectionObserver = class {
@@ -45,6 +48,10 @@ export async function loadContent(html, { mode = 'page', modelAvailable = true, 
       onMessage: { addListener() {} },
       sendMessage: async (message) => {
         if (message.command === 'modelStatus') return { available: modelAvailable }
+        if (message.command === 'lookup') {
+          lookups.push(plain(message.words))
+          return Object.fromEntries(message.words.filter((w) => w in dictionary).map((w) => [w, dictionary[w]]))
+        }
         if (message.command === 'gloss') {
           glossCalls += 1
           sent.push(plain(message.blocks))
@@ -63,6 +70,7 @@ export async function loadContent(html, { mode = 'page', modelAvailable = true, 
     window,
     document: window.document,
     sent,
+    lookups,
     glossCalls: () => glossCalls,
     state: (expression) => window.eval(expression),
     idle: () => window.eval('!rendering && !refining && renderQueue.length === 0 && refineQueue.length === 0 && (typeof retryTimers === "undefined" || retryTimers.size === 0)'),

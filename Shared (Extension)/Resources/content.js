@@ -3,133 +3,9 @@
 // above recognised Lithuanian words — like Japanese furigana.
 //
 // Everything runs on the device, in two tiers:
-//   1. A bundled offline dictionary renders glosses instantly, in the first frame.
+//   1. The dictionary in the background page renders glosses in the first frame.
 //   2. Words the dictionary doesn't know are sent (batched by viewport) to the
 //      on-device model via the background script, and filled in as they arrive.
-
-// --- Offline dictionary -----------------------------------------------------
-// Keys are lowercase Lithuanian words (accented and plain variants are both
-// listed). This is the instant tier; the on-device model fills in the rest.
-const DICTIONARY = {
-    // Greetings & social
-    "labas": "hello", "sveiki": "hello", "sveikas": "hello",
-    "ačiū": "thanks", "aciu": "thanks", "prašom": "please", "prašau": "please",
-    "atsiprašau": "sorry", "atsiprašome": "sorry", "viso": "all", "gero": "good",
-    "iki": "bye", "sudie": "goodbye", "taip": "yes", "ne": "no", "gerai": "okay",
-
-    // Pronouns
-    "aš": "I", "as": "I", "tu": "you", "jis": "he", "ji": "she", "jie": "they",
-    "jos": "they", "mes": "we", "jūs": "you", "jus": "you", "tai": "this",
-    "tas": "that", "ta": "that", "šis": "this", "sis": "this", "ši": "this",
-    "kas": "who", "ką": "what", "ka": "what", "kuris": "which", "savo": "one's",
-    "mano": "my", "tavo": "your", "jo": "his", "jūsų": "your", "mūsų": "our",
-    "musų": "our",
-
-    // Question words
-    "kodėl": "why", "kodel": "why", "kaip": "how", "kur": "where",
-    "kada": "when", "kiek": "how much",
-
-    // Common verbs
-    "yra": "is", "buvo": "was", "būti": "to be", "buti": "to be", "turi": "has",
-    "turėti": "to have", "tureti": "to have", "noriu": "I want", "nori": "wants",
-    "norėti": "to want", "noreti": "to want", "galiu": "I can", "gali": "can",
-    "galėti": "to be able", "žinau": "I know", "zinau": "I know", "žino": "knows",
-    "žinoti": "to know", "matau": "I see", "matyti": "to see", "eiti": "to go",
-    "eina": "goes", "ateiti": "to come", "daryti": "to do", "daro": "does",
-    "sakyti": "to say", "sako": "says", "kalbėti": "to speak", "kalba": "speaks",
-    "skaityti": "to read", "rašyti": "to write", "dirbti": "to work",
-    "dirba": "works", "gyventi": "to live", "gyvena": "lives", "mylėti": "to love",
-    "myliu": "I love", "valgyti": "to eat", "gerti": "to drink",
-    "miegoti": "to sleep", "duoti": "to give", "imti": "to take",
-    "pirkti": "to buy", "mokėti": "to pay", "klausti": "to ask",
-    "atsakyti": "to answer", "padėti": "to help", "reikia": "need",
-    "reikės": "will need",
-
-    // Time
-    "diena": "day", "dieną": "day", "naktis": "night", "rytas": "morning",
-    "vakaras": "evening", "savaitė": "week", "savaite": "week", "mėnuo": "month",
-    "metai": "year", "metų": "years", "valanda": "hour", "minutė": "minute",
-    "laikas": "time", "šiandien": "today", "siandien": "today", "rytoj": "tomorrow",
-    "vakar": "yesterday", "dabar": "now", "visada": "always", "niekada": "never",
-
-    // Days
-    "pirmadienis": "Monday", "antradienis": "Tuesday", "trečiadienis": "Wednesday",
-    "ketvirtadienis": "Thursday", "penktadienis": "Friday", "šeštadienis": "Saturday",
-    "sekmadienis": "Sunday",
-
-    // Numbers
-    "vienas": "one", "viena": "one", "du": "two", "dvi": "two", "trys": "three",
-    "keturi": "four", "penki": "five", "šeši": "six", "sesi": "six",
-    "septyni": "seven", "aštuoni": "eight", "devyni": "nine", "dešimt": "ten",
-    "šimtas": "hundred", "tūkstantis": "thousand",
-
-    // People & family
-    "žmogus": "person", "zmogus": "person", "žmonės": "people", "vyras": "man",
-    "moteris": "woman", "vaikas": "child", "vaikai": "children",
-    "berniukas": "boy", "mergaitė": "girl", "mama": "mom", "motina": "mother",
-    "tėtis": "dad", "tėvas": "father", "tevas": "father", "tėvai": "parents",
-    "brolis": "brother", "sesuo": "sister", "draugas": "friend",
-    "draugė": "friend", "šeima": "family", "seima": "family",
-
-    // Places
-    "namas": "house", "namai": "home", "namie": "at home", "namų": "home",
-    "miestas": "city", "kaimas": "village", "šalis": "country", "salis": "country",
-    "gatvė": "street", "kelias": "road", "mokykla": "school", "darbas": "work",
-    "darbą": "work", "parduotuvė": "shop", "ligoninė": "hospital",
-    "bažnyčia": "church", "pasaulis": "world", "vieta": "place",
-
-    // Nature
-    "vanduo": "water", "ugnis": "fire", "oras": "air", "žemė": "earth",
-    "zeme": "earth", "dangus": "sky", "saulė": "sun", "saule": "sun",
-    "mėnulis": "moon", "žvaigždė": "star", "jūra": "sea", "jura": "sea",
-    "upė": "river", "ežeras": "lake", "miškas": "forest", "miskas": "forest",
-    "medis": "tree", "gėlė": "flower", "gele": "flower", "akmuo": "stone",
-    "kalnas": "mountain", "lietus": "rain", "sniegas": "snow", "vėjas": "wind",
-    "vejas": "wind", "gyvūnas": "animal", "šuo": "dog", "suo": "dog",
-    "katė": "cat", "kate": "cat", "paukštis": "bird", "žuvis": "fish",
-
-    // Food
-    "maistas": "food", "duona": "bread", "pienas": "milk", "sūris": "cheese",
-    "mėsa": "meat", "mesa": "meat", "vaisius": "fruit", "daržovė": "vegetable",
-    "obuolys": "apple", "kava": "coffee", "arbata": "tea", "vynas": "wine",
-    "alus": "beer", "cukrus": "sugar", "druska": "salt",
-
-    // Body
-    "galva": "head", "akis": "eye", "akys": "eyes", "ausis": "ear",
-    "nosis": "nose", "burna": "mouth", "ranka": "hand", "koja": "leg",
-    "širdis": "heart", "sirdis": "heart", "kūnas": "body",
-
-    // Adjectives
-    "geras": "good", "blogas": "bad", "didelis": "big", "mažas": "small",
-    "mazas": "small", "naujas": "new", "senas": "old", "jaunas": "young",
-    "gražus": "beautiful", "grazus": "beautiful", "ilgas": "long",
-    "trumpas": "short", "aukštas": "tall", "greitas": "fast", "lėtas": "slow",
-    "letas": "slow", "karštas": "hot", "karstas": "hot", "šaltas": "cold",
-    "saltas": "cold", "laimingas": "happy", "liūdnas": "sad", "lengvas": "easy",
-    "sunkus": "hard", "svarbus": "important", "tikras": "real", "pilnas": "full",
-    "tuščias": "empty", "švarus": "clean", "stiprus": "strong", "silpnas": "weak",
-    "baltas": "white", "juodas": "black", "raudonas": "red", "mėlynas": "blue",
-    "žalias": "green", "geltonas": "yellow",
-
-    // Connectors & common words
-    "ir": "and", "bet": "but", "arba": "or", "nes": "because", "jei": "if",
-    "jeigu": "if", "kad": "that", "su": "with", "be": "without", "į": "into",
-    "i": "into", "iš": "from", "is": "from", "ant": "on", "po": "after",
-    "prie": "near", "už": "behind", "uz": "behind", "per": "through",
-    "apie": "about", "tarp": "between", "labai": "very", "daug": "many",
-    "mažai": "few", "visi": "all", "viskas": "everything", "niekas": "nothing",
-    "kažkas": "something", "vėl": "again", "vel": "again", "jau": "already",
-    "dar": "still", "tik": "only", "gal": "maybe", "tikrai": "really",
-    "čia": "here", "cia": "here", "ten": "there",
-
-    // Misc nouns
-    "knyga": "book", "knygą": "book", "žodis": "word", "zodis": "word",
-    "vardas": "name", "pinigai": "money", "klausimas": "question",
-    "atsakymas": "answer", "problema": "problem", "istorija": "story",
-    "gyvenimas": "life", "meilė": "love", "meile": "love", "laimė": "happiness",
-    "muzika": "music", "menas": "art", "mokslas": "science", "sveikata": "health",
-    "lietuva": "Lithuania", "lietuvių": "Lithuanian", "lietuviškai": "in Lithuanian"
-};
 
 // --- Furigana styling (injected so no separate stylesheet file is needed) ---
 const FURIGANA_CSS = `
@@ -173,7 +49,7 @@ const ANNOTATION_CLASS = "lithuanify-ruby";
 const WORD_RE = /[\p{L}]+/u;
 const TOKEN_RE = /[\p{L}]+|[^\p{L}]+/gu;
 
-const RENDER_BUDGET_MS = 8;    // dictionary rendering per frame, so the page stays responsive
+const RENDER_BATCH = 25;
 const REFINE_MAX_BLOCKS = 12;  // text blocks per on-device model request
 const REFINE_MAX_WORDS = 40;   // unknown words per on-device model request
 
@@ -188,28 +64,35 @@ let generation = 0;          // bumped on disable, so in-flight work is dropped
 let ownNodes = new WeakSet();
 let contextOf = new WeakMap();
 
-const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
 function isWordToken(token) {
     return WORD_RE.test(token);
 }
 
-// Fold Lithuanian diacritics so a word written without accents (or vice
-// versa) still matches the dictionary.
-const DIACRITIC_MAP = {
-    "ą": "a", "č": "c", "ę": "e", "ė": "e", "į": "i",
-    "š": "s", "ų": "u", "ū": "u", "ž": "z"
-};
-function fold(word) {
-    return word.toLowerCase().replace(/[ąčęėįšųūž]/g, (c) => DIACRITIC_MAP[c]);
-}
+let meanings = new Map();
 
 function dictLookup(word) {
-    const lower = word.toLowerCase();
-    if (hasOwn(DICTIONARY, lower)) return DICTIONARY[lower];
-    const folded = fold(lower);
-    if (hasOwn(DICTIONARY, folded)) return DICTIONARY[folded];
-    return null;
+    return meanings.get(word.toLowerCase()) || null;
+}
+
+async function learnWords(items) {
+    const words = new Set();
+    for (const item of items) {
+        for (const node of item.nodes) {
+            for (const token of (node.nodeValue || "").match(TOKEN_RE) || []) {
+                const lower = token.toLowerCase();
+                if (isWordToken(token) && !meanings.has(lower)) words.add(lower);
+            }
+        }
+    }
+    if (!words.size) return;
+    let found = null;
+    try {
+        found = await browser.runtime.sendMessage({ command: "lookup", words: [...words] });
+    } catch (e) {
+        found = null;
+    }
+    for (const word of words) meanings.set(word, (found && found[word]) || null);
 }
 
 function aiActive() {
@@ -495,30 +378,22 @@ function renderItem(item) {
     }
 }
 
-// Stage 1: dictionary render, in small time slices.
-function pumpRender() {
+async function pumpRender() {
     if (rendering) return;
     rendering = true;
     const gen = generation;
-    const step = () => {
-        if (gen !== generation) return;  // disabled meanwhile; flags were reset
-        if (!enabled || !isVisible()) {
-            rendering = false;
-            return;
+    try {
+        while (enabled && isVisible() && renderQueue.length) {
+            const items = renderQueue.splice(0, RENDER_BATCH);
+            await learnWords(items);
+            if (gen !== generation) return;
+            items.forEach(renderItem);
+            pumpRefine();
         }
-        const start = performance.now();
-        while (renderQueue.length && performance.now() - start < RENDER_BUDGET_MS) {
-            renderItem(renderQueue.shift());
-        }
-        pumpRefine();
-        if (renderQueue.length) {
-            setTimeout(step, 0);
-        } else {
-            rendering = false;
-            logTiming("dictionary pass done");
-        }
-    };
-    step();
+        if (!renderQueue.length) logTiming("dictionary pass done");
+    } finally {
+        if (gen === generation) rendering = false;
+    }
 }
 
 // Take the next batch for the model: from the front of the queue, staying
@@ -648,6 +523,11 @@ function removeAnnotations() {
 
 // Heuristic: is this page (mostly) Lithuanian? Non-Lithuanian pages are left
 // alone, so English words like "is" or "be" aren't glossed.
+const COMMON_WORDS = new Set([
+    "ir", "kad", "yra", "su", "iš", "ne", "tai", "bet", "kaip", "jo", "jis", "ji", "buvo",
+    "tik", "dar", "nuo", "per", "apie", "kur", "labai", "taip", "jau", "mes", "jie", "arba", "bei"
+]);
+
 function detectLithuanian() {
     const lang = (document.documentElement.getAttribute("lang") || "").toLowerCase();
     if (lang.startsWith("lt")) return true;
@@ -658,7 +538,7 @@ function detectLithuanian() {
 
     let hits = 0;
     for (const w of words) {
-        if (/[ąčęėįšųūž]/.test(w) || hasOwn(DICTIONARY, w)) {
+        if (/[ąčęėįšųūž]/.test(w) || COMMON_WORDS.has(w)) {
             hits++;
         }
     }
