@@ -73,7 +73,7 @@ const MEANINGS_MAX = 20000;
 let meanings = new Map();
 
 function entryFor(word) {
-    return meanings.get(word.toLowerCase()) || null;
+    return meanings.get(phraseKey(word)) || null;
 }
 
 function dictLookup(word) {
@@ -86,14 +86,53 @@ function needsPick(word) {
     return !!entry && entry.m.length > 1 && aiActive();
 }
 
+const MAX_PHRASE_WORDS = 3;
+const SPACE_RE = /^[^\S\n]+$/;
+
+function phraseAt(tokens, i, n) {
+    const end = i + 2 * (n - 1);
+    if (end >= tokens.length) return null;
+    for (let j = i; j <= end; j += 2) if (!isWordToken(tokens[j])) return null;
+    for (let j = i + 1; j < end; j += 2) if (!SPACE_RE.test(tokens[j])) return null;
+    return { text: tokens.slice(i, end + 1).join(""), end };
+}
+
+const phraseKey = (text) => text.toLowerCase().replace(/\s+/g, " ");
+
+function mergePhrases(tokens) {
+    const out = [];
+    for (let i = 0; i < tokens.length; i++) {
+        let phrase = null;
+        for (let n = MAX_PHRASE_WORDS; n >= 2 && !phrase; n--) {
+            const found = phraseAt(tokens, i, n);
+            if (found && entryFor(phraseKey(found.text))) phrase = found;
+        }
+        if (phrase) {
+            out.push(phrase.text);
+            i = phrase.end;
+        } else {
+            out.push(tokens[i]);
+        }
+    }
+    return out;
+}
+
 async function learnWords(items) {
     const words = new Set();
+    const ask = (key) => {
+        if (!meanings.has(key)) words.add(key);
+    };
     for (const item of items) {
         for (const node of item.nodes) {
-            for (const token of (node.nodeValue || "").match(TOKEN_RE) || []) {
-                const lower = token.toLowerCase();
-                if (isWordToken(token) && !meanings.has(lower)) words.add(lower);
-            }
+            const tokens = (node.nodeValue || "").match(TOKEN_RE) || [];
+            tokens.forEach((token, i) => {
+                if (!isWordToken(token)) return;
+                ask(token.toLowerCase());
+                for (let n = 2; n <= MAX_PHRASE_WORDS; n++) {
+                    const phrase = phraseAt(tokens, i, n);
+                    if (phrase) ask(phraseKey(phrase.text));
+                }
+            });
         }
     }
     if (!words.size) return true;
@@ -177,7 +216,7 @@ function splitNode(node, tokens, glosses, picks = new Set()) {
 // `parts` is null when nothing matched (the original node is left as is).
 function renderBlock(node) {
     const text = node.nodeValue;
-    const tokens = text.match(TOKEN_RE) || [];
+    const tokens = mergePhrases(text.match(TOKEN_RE) || []);
     const glosses = tokens.map((t) => (isWordToken(t) ? dictLookup(t) : null));
 
     const unknown = [];

@@ -98,7 +98,8 @@ test('an inflected form gets its dictionary meaning from one lookup, and the mod
 
   await waitFor(() => page.glossCalls() === 1)
   assert.deepEqual(page.glosses(), [['Aš', 'I'], ['knygoje', 'book'], ['Knygoje', 'book']])
-  assert.deepEqual(page.lookups, [['aš', 'skaitau', 'knygoje', 'gaisras']])
+  assert.equal(page.lookups.length, 1)
+  assert.deepEqual(page.lookups[0].filter((w) => !w.includes(' ')), ['aš', 'skaitau', 'knygoje', 'gaisras'])
   assert.deepEqual(page.sent[0].map((b) => b.words), [['skaitau'], ['gaisras']])
   answer([{ skaitau: 'G:skaitau' }, { gaisras: 'G:gaisras' }])
   await page.settle()
@@ -160,4 +161,14 @@ test('a capitalised unknown word inside a sentence is taken as a name and not se
   const page = await loadContent(lt('<p>Vilniaus senamiestis. Vakar sutikau Joną ir NATO.</p>'))
   await page.settle()
   assert.deepEqual(page.sent.flat().map((b) => b.words), [['vilniaus', 'senamiestis', 'vakar', 'sutikau', 'ir']])
+})
+
+test('a known phrase shows one meaning over the whole phrase, and its words are not sent', async () => {
+  const page = await loadContent(lt('<p>Aš vis dėlto skaitau.</p>'), {
+    dictionary: { aš: 'I', 'vis dėlto': 'nevertheless' }
+  })
+  await page.settle()
+  assert.deepEqual(page.glosses(), [['Aš', 'I'], ['vis dėlto', 'nevertheless'], ['skaitau', 'G:skaitau']])
+  assert.deepEqual(page.sent.flat().map((b) => b.words), [['skaitau']])
+  assert.ok(page.lookups[0].includes('vis dėlto'))
 })
