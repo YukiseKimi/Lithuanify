@@ -97,8 +97,7 @@ public enum GlossCore {
 
     public static func clean(_ gloss: String, word: String) -> String {
         let source = fold(word)
-        let parts = gloss
-            .components(separatedBy: ". ")
+        let parts = joinAbbreviations(gloss.components(separatedBy: ". "))
             .map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)) }
             .filter { !$0.isEmpty }
         let english = parts.filter { part in
@@ -106,6 +105,26 @@ public enum GlossCore {
         }
         let pick = english.last ?? parts.last ?? ""
         return pick.split(separator: " ").prefix(maxGlossWords).joined(separator: " ")
+    }
+
+    private static func joinAbbreviations(_ pieces: [String]) -> [String] {
+        var joined: [String] = []
+        var pending: String?
+        for (n, piece) in pieces.enumerated() {
+            let part = pending.map { "\($0). \(piece)" } ?? piece
+            let word = piece.split(separator: " ").last.map(String.init) ?? ""
+            if isAbbreviation(word) && n < pieces.count - 1 {
+                pending = part
+            } else {
+                joined.append(part)
+                pending = nil
+            }
+        }
+        return joined
+    }
+
+    private static func isAbbreviation(_ word: String) -> Bool {
+        (1...3).contains(word.count) && word.allSatisfy(\.isLetter) && word.first?.isUppercase == true
     }
 
     private static func fold(_ text: String) -> String {

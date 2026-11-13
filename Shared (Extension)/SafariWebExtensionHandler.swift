@@ -158,7 +158,7 @@ enum Glosser {
                 to: GlossCore.prompt(for: job),
                 options: GenerationOptions(samplingMode: .greedy)
             )
-            logger.debug("Model answer: \(response.content, privacy: .public)")
+            logger.debug("Model answer: \(response.content, privacy: .private)")
             return GlossCore.parse(response.content)
         } catch {
             logger.error("Gloss failed: \(String(describing: error), privacy: .public)")

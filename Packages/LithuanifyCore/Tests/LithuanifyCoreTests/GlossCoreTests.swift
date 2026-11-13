@@ -15,6 +15,9 @@ struct CleanTests {
         ("buto", "room", "room"),
         ("x", "a very long answer that goes on and on", "a very long"),
         ("ir", "first. ir", "first"),
+        ("petro", "St. Peter", "St. Peter"),
+        ("daktaras", "Dr. Smith", "Dr. Smith"),
+        ("aikštė", "square. St. Mark", "St. Mark"),
     ])
     func cleanKeepsTheEnglishMeaning(word: String, gloss: String, expected: String) {
         #expect(GlossCore.clean(gloss, word: word) == expected)
