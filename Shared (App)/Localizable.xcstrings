@@ -1,0 +1,246 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Button.OpenSafariSettings": {
+      "comment": "Mac button that opens Safari's settings for this extension.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Safari Settings…"
+          }
+        }
+      }
+    },
+    "Setup.AllowWebsites": {
+      "comment": "Setup step 3 on every platform.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow it on all websites."
+          }
+        }
+      }
+    },
+    "Setup.Credits": {
+      "comment": "Credits for the open data the dictionary uses. Keep the licence name as it is.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictionary: Wiktionary (CC BY-SA 4.0) and the Hunspell lt_LT word list."
+          }
+        }
+      }
+    },
+    "Setup.Heading": {
+      "comment": "Heading above the numbered setup steps.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on Lithuanify in Safari"
+          }
+        }
+      }
+    },
+    "Setup.MacOpenSettings": {
+      "comment": "Setup step 1 on Mac.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Safari Settings, then click Extensions."
+          }
+        }
+      }
+    },
+    "Setup.OpenSettingsFailed": {
+      "comment": "Shown on Mac when the button could not open Safari Settings.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safari Settings didn't open. In Safari, choose Safari, then Settings, then Extensions."
+          }
+        }
+      }
+    },
+    "Setup.PhoneOpenSettings": {
+      "comment": "Setup step 1 on iPhone and iPad.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the Settings app, then go to Apps, Safari, Extensions."
+          }
+        }
+      }
+    },
+    "Setup.Tagline": {
+      "comment": "One line under the app's name that says what the app does.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "English meanings above Lithuanian words, on your device."
+          }
+        }
+      }
+    },
+    "Setup.Title": {
+      "comment": "The app's name, as the title of its only window.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lithuanify"
+          }
+        }
+      }
+    },
+    "Setup.TurnOn": {
+      "comment": "Setup step 2 on every platform.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on Lithuanify."
+          }
+        }
+      }
+    },
+    "Status.ExtensionOff": {
+      "comment": "Mac status chip: the Safari extension is turned off.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extension off"
+          }
+        }
+      }
+    },
+    "Status.ExtensionOffFix": {
+      "comment": "Under the Extension off chip: how to fix it.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn it on in the Extensions section of Safari Settings."
+          }
+        }
+      }
+    },
+    "Status.ExtensionOn": {
+      "comment": "Mac status chip: the Safari extension is turned on.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extension on"
+          }
+        }
+      }
+    },
+    "Status.ModelDownloading": {
+      "comment": "Status chip: the on-device model is not ready yet.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device AI downloading"
+          }
+        }
+      }
+    },
+    "Status.ModelDownloadingFix": {
+      "comment": "Under the downloading chip.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The dictionary works now. Meanings from the AI start when the download ends."
+          }
+        }
+      }
+    },
+    "Status.ModelNotSupported": {
+      "comment": "Status chip: this device cannot run Apple's on-device model.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device AI not available"
+          }
+        }
+      }
+    },
+    "Status.ModelNotSupportedFix": {
+      "comment": "Under the not available chip.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The dictionary still gives meanings for most words."
+          }
+        }
+      }
+    },
+    "Status.ModelOff": {
+      "comment": "Status chip: Apple Intelligence is turned off in Settings.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence off"
+          }
+        }
+      }
+    },
+    "Status.ModelOffFix": {
+      "comment": "Under the Apple Intelligence off chip: how to fix it.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on Apple Intelligence in Settings to get meanings for the words the dictionary doesn't know."
+          }
+        }
+      }
+    },
+    "Status.ModelReady": {
+      "comment": "Status chip: Apple's on-device language model can give meanings.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device AI ready"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

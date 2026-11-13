@@ -64,6 +64,7 @@
 			membershipExceptions = (
 				"/Localized: Resources/Main.html",
 				Assets.xcassets,
+				Localizable.xcstrings,
 				Resources/Icon.png,
 				Resources/Script.js,
 				Resources/Style.css,
@@ -90,6 +91,7 @@
 			membershipExceptions = (
 				"/Localized: Resources/Main.html",
 				Assets.xcassets,
+				Localizable.xcstrings,
 				Resources/Icon.png,
 				Resources/Script.js,
 				Resources/Style.css,
