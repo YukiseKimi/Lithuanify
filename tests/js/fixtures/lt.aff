@@ -1,0 +1,13 @@
+SET UTF-8
+
+SFX A Y 3
+SFX A a os a
+SFX A a oje a
+SFX A a omis a
+
+PFX N Y 1
+PFX N 0 ne .
+
+SFX B N 2
+SFX B as o as
+SFX B as ui [^g]as

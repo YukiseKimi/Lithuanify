@@ -1,0 +1,6 @@
+{"word":"knyga","lang_code":"lt","pos":"noun","senses":[{"glosses":["book (written work)"]}],"forms":[{"form":"knygos","tags":["genitive"]},{"form":"knygą","tags":["accusative"]},{"form":"-","tags":["table-tags"]}]}
+{"word":"knygoje","lang_code":"lt","pos":"noun","senses":[{"glosses":["locative singular of knyga"],"form_of":[{"word":"knyga"}]}]}
+{"word":"skaityti","lang_code":"lt","pos":"verb","senses":[{"glosses":["to read; to count"]}]}
+{"word":"Vilnius","lang_code":"lt","pos":"name","senses":[{"glosses":["Vilnius (capital)"]}]}
+{"word":"book","lang_code":"en","pos":"noun","senses":[{"glosses":["knyga"]}]}
+{"word":"gaisras","lang_code":"lt","pos":"noun","senses":[{"glosses":["fire, blaze"]},{"glosses":["conflagration"]}]}
