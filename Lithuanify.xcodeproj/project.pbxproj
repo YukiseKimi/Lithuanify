@@ -110,6 +110,7 @@
 				Resources/_locales,
 				Resources/background.js,
 				Resources/content.js,
+				Resources/dictionary,
 				Resources/images,
 				Resources/manifest.json,
 				Resources/popup.css,
@@ -125,6 +126,7 @@
 				Resources/_locales,
 				Resources/background.js,
 				Resources/content.js,
+				Resources/dictionary,
 				Resources/images,
 				Resources/manifest.json,
 				Resources/popup.css,
@@ -154,6 +156,7 @@
 			);
 			explicitFolders = (
 				Resources/_locales,
+				Resources/dictionary,
 				Resources/images,
 			);
 			path = "Shared (Extension)";
