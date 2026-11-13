@@ -19,3 +19,6 @@ xcuserdata/
 # Swift Package Manager
 .build/
 .swiftpm/
+
+# Node test tooling
+node_modules/

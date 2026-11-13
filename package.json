@@ -1,0 +1,12 @@
+{
+  "name": "lithuanify-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-timeout=30000 tests/js/*.test.mjs"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "6.0.0",
+    "jsdom": "25.0.1"
+  }
+}
