@@ -17,13 +17,14 @@ test('Wiktionary gives Lithuanian lemmas with their forms, and skips names and o
   assert.deepEqual([...lemmas.keys()], ['knyga', 'skaityti', 'gaisras'])
   assert.equal(lemmas.get('knyga').gloss, 'book')
   assert.deepEqual([...lemmas.get('knyga').forms].sort(), ['knygoje', 'knygos', 'knygą'])
+  assert.equal(lemmas.get('skaityti').forms.has('skaĩtau'), false)
   assert.equal(lemmas.get('gaisras').gloss, 'fire')
 })
 
-test('Hunspell rules make each form, with prefixes across suffixes and conditions respected', () => {
+test('Hunspell suffix rules make each form, respect conditions, and add no prefixed forms', () => {
   const forms = expandHunspell(fixture('lt.dic'), parseAffixes(fixture('lt.aff')))
   assert.deepEqual([...forms.get('knyga')].sort(), [
-    'knyga', 'knygoje', 'knygomis', 'knygos', 'neknyga', 'neknygoje', 'neknygomis', 'neknygos'
+    'knyga', 'knygoje', 'knygomis', 'knygos'
   ])
   assert.deepEqual([...forms.get('gaisras')].sort(), ['gaisras', 'gaisro', 'gaisrui'])
   assert.deepEqual([...forms.get('lagas')].sort(), ['lagas', 'lago'])
@@ -34,7 +35,7 @@ test('the dictionary file has one line per lemma: gloss, lemma, then every other
   const forms = expandHunspell(fixture('lt.dic'), parseAffixes(fixture('lt.aff')))
   assert.equal(writeDictionary(lemmas, forms), [
     'fire\tgaisras\tgaisro gaisrui',
-    'book\tknyga\tknygoje knygomis knygos knygą neknyga neknygoje neknygomis neknygos',
+    'book\tknyga\tknygoje knygomis knygos knygą',
     'read\tskaityti\t',
     ''
   ].join('\n'))

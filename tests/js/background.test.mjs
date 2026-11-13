@@ -154,3 +154,10 @@ test('a missing dictionary file gives no meanings and no error', async () => {
   const bg = load({ dictionary: null })
   assert.deepEqual(await bg.lookup(['knyga']), {})
 })
+
+test('a negated word gets "not" before the meaning of the word after ne or nebe', async () => {
+  const bg = load({ dictionary: sample })
+  assert.deepEqual(await bg.lookup(['neskaitau', 'nebeskaito', 'nežinios', 'nesu']), {
+    neskaitau: 'not read', nebeskaito: 'not read', nežinios: 'not news'
+  })
+})

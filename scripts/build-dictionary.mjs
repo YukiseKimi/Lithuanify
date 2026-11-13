@@ -13,7 +13,7 @@ const SOURCES = {
 const MAX_GLOSS_WORDS = 3
 const SKIPPED_POS = new Set(['name', 'character', 'symbol', 'abbrev', 'suffix', 'prefix', 'phrase', 'proverb'])
 
-const isWord = (text) => /^\p{L}+$/u.test(text)
+const isWord = (text) => /^[a-ząčęėįšųūž]+$/.test(text)
 
 export function shortGloss(text) {
   const first = text
@@ -69,31 +69,27 @@ export function parseAffixes(affText) {
   for (let i = 0; i < lines.length; i++) {
     const parts = lines[i].trim().split(/\s+/)
     if (parts[0] === 'FLAG') mode = parts[1] === 'long' ? 'long' : parts[1] === 'num' ? 'num' : 'char'
-    if (parts[0] !== 'SFX' && parts[0] !== 'PFX') continue
+    if (parts[0] !== 'SFX') continue
     if (parts.length !== 4 || !/^\d+$/.test(parts[3])) continue
-    const [kind, flag, cross, count] = parts
+    const [, flag, , count] = parts
     const entries = []
     for (let n = 0; n < Number(count); n++) {
       const rule = (lines[++i] || '').trim().split(/\s+/)
       const strip = rule[2] === '0' ? '' : rule[2]
       const add = (rule[3] || '').split('/')[0]
       const condition = !rule[4] || rule[4] === '.' ? null
-        : new RegExp(kind === 'SFX' ? `${rule[4]}$` : `^${rule[4]}`, 'u')
+        : new RegExp(`${rule[4]}$`, 'u')
       entries.push({ strip, add: add === '0' ? '' : add, condition })
     }
-    rules.set(flag, { kind, cross: cross === 'Y', entries })
+    rules.set(flag, entries)
   }
   return { mode, rules }
 }
 
-function applyRule(word, rule, entry) {
+function applySuffix(word, entry) {
   if (entry.condition && !entry.condition.test(word)) return null
-  if (rule.kind === 'SFX') {
-    if (entry.strip && !word.endsWith(entry.strip)) return null
-    return word.slice(0, word.length - entry.strip.length) + entry.add
-  }
-  if (entry.strip && !word.startsWith(entry.strip)) return null
-  return entry.add + word.slice(entry.strip.length)
+  if (entry.strip && !word.endsWith(entry.strip)) return null
+  return word.slice(0, word.length - entry.strip.length) + entry.add
 }
 
 export function expandHunspell(dicText, affixes) {
@@ -107,26 +103,10 @@ export function expandHunspell(dicText, affixes) {
     if (!isWord(word)) continue
     const flags = splitFlags(slash < 0 ? '' : head.slice(slash + 1), affixes.mode)
     const out = new Set([word])
-    const suffixed = []
     for (const flag of flags) {
-      const rule = affixes.rules.get(flag)
-      if (!rule || rule.kind !== 'SFX') continue
-      for (const entry of rule.entries) {
-        const form = applyRule(word, rule, entry)
-        if (form && isWord(form)) {
-          out.add(form)
-          if (rule.cross) suffixed.push(form)
-        }
-      }
-    }
-    for (const flag of flags) {
-      const rule = affixes.rules.get(flag)
-      if (!rule || rule.kind !== 'PFX') continue
-      for (const base of rule.cross ? [word, ...suffixed] : [word]) {
-        for (const entry of rule.entries) {
-          const form = applyRule(base, rule, entry)
-          if (form && isWord(form)) out.add(form)
-        }
+      for (const entry of affixes.rules.get(flag) || []) {
+        const form = applySuffix(word, entry)
+        if (form && isWord(form)) out.add(form)
       }
     }
     const known = forms.get(word)

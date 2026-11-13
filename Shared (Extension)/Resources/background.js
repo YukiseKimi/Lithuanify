@@ -266,13 +266,25 @@ function loadDictionary() {
     return dictionaryPromise;
 }
 
+const NEGATIONS = ["nebe", "ne"];
+
+function meaningOf(meanings, word) {
+    const gloss = meanings.get(word) || meanings.get(foldWord(word));
+    if (gloss) return gloss;
+    const prefix = NEGATIONS.find((p) => word.startsWith(p) && word.length > p.length + 2);
+    if (!prefix) return null;
+    const rest = word.slice(prefix.length);
+    const base = meanings.get(rest) || meanings.get(foldWord(rest));
+    return base ? "not " + base : null;
+}
+
 async function handleLookup(words) {
     const meanings = await loadDictionary();
     const found = {};
     for (const word of words) {
         if (typeof word !== "string") continue;
         const lower = word.toLowerCase();
-        const gloss = meanings.get(lower) || meanings.get(foldWord(lower));
+        const gloss = meaningOf(meanings, lower);
         if (gloss) found[word] = gloss;
     }
     return found;
