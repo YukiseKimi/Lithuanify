@@ -11,6 +11,8 @@
 		501759AF2FD8155200559D08 /* Lithuanify Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 501759AE2FD8155200559D08 /* Lithuanify Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		50A1C0042FD9000000000004 /* LithuanifyCore in Frameworks */ = {isa = PBXBuildFile; productRef = 50A1C0022FD9000000000002 /* LithuanifyCore */; };
 		50A1C0052FD9000000000005 /* LithuanifyCore in Frameworks */ = {isa = PBXBuildFile; productRef = 50A1C0032FD9000000000003 /* LithuanifyCore */; };
+		50A1C0082FD9000000000008 /* LithuanifyCore in Frameworks */ = {isa = PBXBuildFile; productRef = 50A1C0062FD9000000000006 /* LithuanifyCore */; };
+		50A1C0092FD9000000000009 /* LithuanifyCore in Frameworks */ = {isa = PBXBuildFile; productRef = 50A1C0072FD9000000000007 /* LithuanifyCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -62,13 +64,11 @@
 		501759D22FD8155200559D08 /* Exceptions for "Shared (App)" folder in "Lithuanify (iOS)" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				"/Localized: Resources/Main.html",
 				Assets.xcassets,
+				LithuanifyApp.swift,
 				Localizable.xcstrings,
-				Resources/Icon.png,
-				Resources/Script.js,
-				Resources/Style.css,
-				ViewController.swift,
+				SetupStatus.swift,
+				SetupView.swift,
 			);
 			target = 501759862FD8155200559D08 /* Lithuanify (iOS) */;
 		};
@@ -79,23 +79,14 @@
 			);
 			target = 501759A32FD8155200559D08 /* Lithuanify Extension (iOS) */;
 		};
-		501759DB2FD8155200559D08 /* Exceptions for "iOS (App)" folder in "Lithuanify (iOS)" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 501759862FD8155200559D08 /* Lithuanify (iOS) */;
-		};
 		501759DC2FD8155200559D08 /* Exceptions for "Shared (App)" folder in "Lithuanify (macOS)" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				"/Localized: Resources/Main.html",
 				Assets.xcassets,
+				LithuanifyApp.swift,
 				Localizable.xcstrings,
-				Resources/Icon.png,
-				Resources/Script.js,
-				Resources/Style.css,
-				ViewController.swift,
+				SetupStatus.swift,
+				SetupView.swift,
 			);
 			target = 501759982FD8155200559D08 /* Lithuanify (macOS) */;
 		};
@@ -166,9 +157,6 @@
 		};
 		501759892FD8155200559D08 /* iOS (App) */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				501759DB2FD8155200559D08 /* Exceptions for "iOS (App)" folder in "Lithuanify (iOS)" target */,
-			);
 			path = "iOS (App)";
 			sourceTree = "<group>";
 		};
@@ -199,11 +187,13 @@
 		501759842FD8155200559D08 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				50A1C0082FD9000000000008 /* LithuanifyCore in Frameworks */,
 			);
 		};
 		501759962FD8155200559D08 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				50A1C0092FD9000000000009 /* LithuanifyCore in Frameworks */,
 			);
 		};
 		501759A12FD8155200559D08 /* Frameworks */ = {
@@ -266,6 +256,9 @@
 				501759892FD8155200559D08 /* iOS (App) */,
 			);
 			name = "Lithuanify (iOS)";
+			packageProductDependencies = (
+				50A1C0062FD9000000000006 /* LithuanifyCore */,
+			);
 			productName = "Lithuanify (iOS)";
 			productReference = 501759872FD8155200559D08 /* Lithuanify.app */;
 			productType = "com.apple.product-type.application";
@@ -288,6 +281,9 @@
 				5017599A2FD8155200559D08 /* macOS (App) */,
 			);
 			name = "Lithuanify (macOS)";
+			packageProductDependencies = (
+				50A1C0072FD9000000000007 /* LithuanifyCore */,
+			);
 			productName = "Lithuanify (macOS)";
 			productReference = 501759992FD8155200559D08 /* Lithuanify.app */;
 			productType = "com.apple.product-type.application";
@@ -521,11 +517,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 4V4WYXA8NM;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "iOS (App)/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Lithuanify;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
-				INFOPLIST_KEY_UIMainStoryboardFile = Main;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
@@ -562,11 +557,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 4V4WYXA8NM;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "iOS (App)/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Lithuanify;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
-				INFOPLIST_KEY_UIMainStoryboardFile = Main;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
@@ -681,7 +675,6 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Lithuanify;
-				INFOPLIST_KEY_NSMainStoryboardFile = Main;
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -722,7 +715,6 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Lithuanify;
-				INFOPLIST_KEY_NSMainStoryboardFile = Main;
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -924,6 +916,16 @@
 			productName = LithuanifyCore;
 		};
 		50A1C0032FD9000000000003 /* LithuanifyCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 50A1C0012FD9000000000001 /* XCLocalSwiftPackageReference "Packages/LithuanifyCore" */;
+			productName = LithuanifyCore;
+		};
+		50A1C0062FD9000000000006 /* LithuanifyCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 50A1C0012FD9000000000001 /* XCLocalSwiftPackageReference "Packages/LithuanifyCore" */;
+			productName = LithuanifyCore;
+		};
+		50A1C0072FD9000000000007 /* LithuanifyCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 50A1C0012FD9000000000001 /* XCLocalSwiftPackageReference "Packages/LithuanifyCore" */;
 			productName = LithuanifyCore;
