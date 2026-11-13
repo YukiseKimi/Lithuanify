@@ -82,28 +82,50 @@ async function cacheGetMany(keys) {
 
     const db = await openDb();
     if (!db) return hits;
-    await new Promise((resolve) => {
-        const tx = db.transaction(STORE, "readonly");
-        const store = tx.objectStore(STORE);
+    await transact(db, "readonly", (store) => {
         for (const k of missing) {
             const req = store.get(k);
             req.onsuccess = () => {
                 if (req.result) {
-                    memCache.set(k, req.result.v);
+                    remember(k, req.result.v);
                     hits.set(k, req.result.v);
                 }
             };
         }
-        tx.oncomplete = resolve;
-        tx.onerror = resolve;
-        tx.onabort = resolve;
     });
     return hits;
 }
 
-function cachePut(key, value) {
+function transact(db, mode, work) {
+    return new Promise((resolve) => {
+        let tx;
+        try {
+            tx = db.transaction(STORE, mode);
+            work(tx.objectStore(STORE));
+        } catch (e) {
+            dbPromise = null;
+            resolve(false);
+            return;
+        }
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+        tx.onabort = () => resolve(false);
+    });
+}
+
+function remember(key, value) {
+    memCache.delete(key);
     memCache.set(key, value);
+    while (memCache.size > CACHE_MAX) {
+        const oldest = memCache.keys().next().value;
+        memCache.delete(oldest);
+        dirty.delete(oldest);
+    }
+}
+
+function cachePut(key, value) {
     dirty.set(key, value);
+    remember(key, value);
 }
 
 async function flushCache() {
@@ -113,34 +135,35 @@ async function flushCache() {
     const entries = [...dirty];
     dirty.clear();
     const now = Date.now();
-    await new Promise((resolve) => {
-        const tx = db.transaction(STORE, "readwrite");
-        const store = tx.objectStore(STORE);
+    const saved = await transact(db, "readwrite", (store) => {
         for (const [k, v] of entries) store.put({ k, v, t: now });
-        tx.oncomplete = resolve;
-        tx.onerror = resolve;
-        tx.onabort = resolve;
     });
+    if (!saved) {
+        for (const [k, v] of entries) {
+            if (!dirty.has(k) && memCache.has(k)) dirty.set(k, v);
+        }
+        return;
+    }
     evictIfNeeded(db);
 }
 
 // Drop the oldest entries once the store grows past CACHE_MAX.
 function evictIfNeeded(db) {
-    const tx = db.transaction(STORE, "readwrite");
-    const store = tx.objectStore(STORE);
-    const countReq = store.count();
-    countReq.onsuccess = () => {
-        let excess = countReq.result - CACHE_MAX;
-        if (excess <= 0) return;
-        store.index("t").openCursor().onsuccess = (event) => {
-            const cursor = event.target.result;
-            if (!cursor || excess <= 0) return;
-            memCache.delete(cursor.value.k);
-            cursor.delete();
-            excess--;
-            cursor.continue();
+    transact(db, "readwrite", (store) => {
+        const countReq = store.count();
+        countReq.onsuccess = () => {
+            let excess = countReq.result - CACHE_MAX;
+            if (excess <= 0) return;
+            store.index("t").openCursor().onsuccess = (event) => {
+                const cursor = event.target.result;
+                if (!cursor || excess <= 0) return;
+                memCache.delete(cursor.value.k);
+                cursor.delete();
+                excess--;
+                cursor.continue();
+            };
         };
-    };
+    });
 }
 
 // One-time cleanup of the old storage.local caches (old format, and the

@@ -93,10 +93,10 @@ export async function loadContent(html, { mode = 'page', modelAvailable = true, 
   return page
 }
 
-export function loadBackground({ native }) {
+export function loadBackground({ native, idb = indexedDB }) {
   const nativeCalls = []
   const context = vm.createContext({
-    indexedDB,
+    indexedDB: idb,
     IDBKeyRange,
     console,
     setTimeout,
@@ -117,5 +117,10 @@ export function loadBackground({ native }) {
     await new Promise((resolve) => setTimeout(resolve, 50))
     await vm.runInContext('dbPromise ? dbPromise.then((db) => db && db.close()) : null', context)
   }
-  return { gloss: async (blocks) => plain(await context.handleGloss(blocks)), nativeCalls, close }
+  return {
+    gloss: async (blocks) => plain(await context.handleGloss(blocks)),
+    nativeCalls,
+    close,
+    state: (expression) => vm.runInContext(expression, context)
+  }
 }

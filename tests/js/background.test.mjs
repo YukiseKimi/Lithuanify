@@ -91,3 +91,30 @@ test('the model being off is reported to the page', async () => {
   const result = await bg.gloss([{ text: 'Aš skaitau.', words: ['skaitau'] }])
   assert.deepEqual(result, { available: false, results: [] })
 })
+
+test('the memory cache stays bounded when site storage is blocked', async () => {
+  const blocked = { open() { throw new Error('blocked') } }
+  const bg = load({ native: reply, idb: blocked })
+  const blocks = Array.from({ length: 5001 }, (_, i) => ({ text: `Sakinys ${i}.`, words: ['sakinys'] }))
+
+  await bg.gloss(blocks)
+
+  assert.equal(bg.state('memCache.size'), 5000)
+  assert.equal(bg.state('dirty.size'), 5000)
+  assert.equal(bg.state('memCache.has(keyOf({ text: "Sakinys 0.", words: ["sakinys"] }))'), false)
+})
+
+test('a save on a closed cache connection keeps its entries for the next save', async () => {
+  const bg = load({ native: reply })
+  await bg.gloss([{ text: 'Aš skaitau.', words: ['skaitau'] }])
+  await bg.state('dbPromise.then((db) => db.close())')
+
+  const result = await bg.gloss([{ text: 'Karas tęsiasi.', words: ['karas'] }])
+  assert.deepEqual(result.results, [{ karas: 'G:karas' }])
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  await bg.state('flushCache()')
+
+  const fresh = load({ native: reply })
+  await fresh.gloss([{ text: 'Karas tęsiasi.', words: ['karas'] }])
+  assert.equal(fresh.nativeCalls.length, 0)
+})
