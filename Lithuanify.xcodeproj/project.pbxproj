@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		501759A52FD8155200559D08 /* Lithuanify Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 501759A42FD8155200559D08 /* Lithuanify Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		501759AF2FD8155200559D08 /* Lithuanify Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 501759AE2FD8155200559D08 /* Lithuanify Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		50A1C0042FD9000000000004 /* LithuanifyCore in Frameworks */ = {isa = PBXBuildFile; productRef = 50A1C0022FD9000000000002 /* LithuanifyCore */; };
+		50A1C0052FD9000000000005 /* LithuanifyCore in Frameworks */ = {isa = PBXBuildFile; productRef = 50A1C0032FD9000000000003 /* LithuanifyCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -202,11 +204,13 @@
 		501759A12FD8155200559D08 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				50A1C0042FD9000000000004 /* LithuanifyCore in Frameworks */,
 			);
 		};
 		501759AB2FD8155200559D08 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				50A1C0052FD9000000000005 /* LithuanifyCore in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -297,6 +301,9 @@
 				501759A82FD8155200559D08 /* iOS (Extension) */,
 			);
 			name = "Lithuanify Extension (iOS)";
+			packageProductDependencies = (
+				50A1C0022FD9000000000002 /* LithuanifyCore */,
+			);
 			productName = "Lithuanify Extension (iOS)";
 			productReference = 501759A42FD8155200559D08 /* Lithuanify Extension.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -315,6 +322,9 @@
 				501759B22FD8155200559D08 /* macOS (Extension) */,
 			);
 			name = "Lithuanify Extension (macOS)";
+			packageProductDependencies = (
+				50A1C0032FD9000000000003 /* LithuanifyCore */,
+			);
 			productName = "Lithuanify Extension (macOS)";
 			productReference = 501759AE2FD8155200559D08 /* Lithuanify Extension.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -352,6 +362,9 @@
 			);
 			mainGroup = 5017596A2FD8155100559D08;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				50A1C0012FD9000000000001 /* XCLocalSwiftPackageReference "Packages/LithuanifyCore" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 501759882FD8155200559D08 /* Products */;
 			projectDirPath = "";
@@ -891,6 +904,26 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		50A1C0012FD9000000000001 /* XCLocalSwiftPackageReference "Packages/LithuanifyCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/LithuanifyCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		50A1C0022FD9000000000002 /* LithuanifyCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 50A1C0012FD9000000000001 /* XCLocalSwiftPackageReference "Packages/LithuanifyCore" */;
+			productName = LithuanifyCore;
+		};
+		50A1C0032FD9000000000003 /* LithuanifyCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 50A1C0012FD9000000000001 /* XCLocalSwiftPackageReference "Packages/LithuanifyCore" */;
+			productName = LithuanifyCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 5017596B2FD8155100559D08 /* Project object */;
 	validationLevel = 1;
