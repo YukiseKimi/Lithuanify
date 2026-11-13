@@ -125,7 +125,8 @@ test('a save on a closed cache connection keeps its entries for the next save', 
 
 const sample = [
   'book\tknyga\tknygoje knygos knygą',
-  'read\tskaityti\tskaitau skaito',
+  'read\tskaityti\tskaitau skaito skaičiau\tne',
+  'number\tskaičius\tskaičiaus skaičiau',
   'fire\tgaisras\tgaisro',
   'of the book\tknygos\t',
   'news\tžinia\tžinios',
@@ -157,9 +158,17 @@ test('a missing dictionary file gives no meanings and no error', async () => {
 
 test('a negated word gets "not" before the meaning of the word after ne or nebe', async () => {
   const bg = load({ dictionary: sample })
-  assert.deepEqual(await bg.lookup(['neskaitau', 'nebeskaito', 'nežinios', 'nesu']), {
-    neskaitau: 'not read', nebeskaito: 'not read', nežinios: 'not news'
-  })
+  assert.deepEqual(await bg.lookup(['neskaitau', 'nebeskaito', 'nesu']), { neskaitau: 'not read', nebeskaito: 'not read' })
+})
+
+test('ne is read as "not" only before a word that Hunspell lets take it', async () => {
+  const bg = load({ dictionary: sample })
+  assert.deepEqual(await bg.lookup(['nežinios', 'negaisro']), {})
+})
+
+test('a form of two lemmas with different meanings gets no dictionary meaning', async () => {
+  const bg = load({ dictionary: sample })
+  assert.deepEqual(await bg.lookup(['skaičiau', 'skaičiaus', 'skaito']), { skaičiaus: 'number', skaito: 'read' })
 })
 
 test('a dictionary file that failed to load is read again on the next lookup', async () => {

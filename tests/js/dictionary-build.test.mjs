@@ -17,12 +17,14 @@ test('Wiktionary gives Lithuanian lemmas with their forms, and skips names and o
   assert.deepEqual([...lemmas.keys()], ['knyga', 'skaityti', 'gaisras'])
   assert.equal(lemmas.get('knyga').gloss, 'book')
   assert.deepEqual([...lemmas.get('knyga').forms].sort(), ['knygoje', 'knygos', 'knygą'])
-  assert.equal(lemmas.get('skaityti').forms.has('skaĩtau'), false)
+  assert.deepEqual([...lemmas.get('skaityti').forms], ['skaitau'])
   assert.equal(lemmas.get('gaisras').gloss, 'fire')
 })
 
 test('Hunspell suffix rules make each form, respect conditions, and add no prefixed forms', () => {
-  const forms = expandHunspell(fixture('lt.dic'), parseAffixes(fixture('lt.aff')))
+  const negatable = new Set()
+  const forms = expandHunspell(fixture('lt.dic'), parseAffixes(fixture('lt.aff')), negatable)
+  assert.deepEqual([...negatable], ['knyga'])
   assert.deepEqual([...forms.get('knyga')].sort(), [
     'knyga', 'knygoje', 'knygomis', 'knygos'
   ])
@@ -30,13 +32,14 @@ test('Hunspell suffix rules make each form, respect conditions, and add no prefi
   assert.deepEqual([...forms.get('lagas')].sort(), ['lagas', 'lago'])
 })
 
-test('the dictionary file has one line per lemma: gloss, lemma, then every other form', () => {
+test('the dictionary file has one line per lemma: gloss, lemma, every other form, and ne when it takes ne-', () => {
   const lemmas = readWiktionary(fixture('wiktionary.jsonl').split('\n'))
-  const forms = expandHunspell(fixture('lt.dic'), parseAffixes(fixture('lt.aff')))
-  assert.equal(writeDictionary(lemmas, forms), [
+  const negatable = new Set()
+  const forms = expandHunspell(fixture('lt.dic'), parseAffixes(fixture('lt.aff')), negatable)
+  assert.equal(writeDictionary(lemmas, forms, negatable), [
     'fire\tgaisras\tgaisro gaisrui',
-    'book\tknyga\tknygoje knygomis knygos knygą',
-    'read\tskaityti\t',
+    'book\tknyga\tknygoje knygomis knygos knygą\tne',
+    'read\tskaityti\tskaitau',
     ''
   ].join('\n'))
 })

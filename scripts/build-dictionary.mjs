@@ -15,6 +15,9 @@ const SKIPPED_POS = new Set(['name', 'character', 'symbol', 'abbrev', 'suffix', 
 
 const isWord = (text) => /^[a-ząčęėįšųūž]+$/.test(text)
 
+const STRESS_MARKS = /[\u0300\u0301\u0303]/g
+const withoutStress = (text) => text.normalize('NFD').replace(STRESS_MARKS, '').normalize('NFC')
+
 export function shortGloss(text) {
   const first = text
     .replace(/\([^)]*\)/g, ' ')
@@ -42,7 +45,7 @@ export function readWiktionary(lines) {
       if (!gloss || lemmas.has(word)) continue
       const forms = new Set()
       for (const form of entry.forms || []) {
-        const text = (form.form || '').toLowerCase()
+        const text = withoutStress((form.form || '').toLowerCase())
         if (isWord(text) && text !== word) forms.add(text)
       }
       lemmas.set(word, { gloss, forms })
@@ -62,16 +65,19 @@ function splitFlags(flags, mode) {
   return [...flags]
 }
 
+const NEGATING_PREFIXES = new Set(['ne', 'nebe'])
+
 export function parseAffixes(affText) {
   const rules = new Map()
+  const negating = new Set()
   let mode = 'char'
   const lines = affText.split(/\r?\n/)
   for (let i = 0; i < lines.length; i++) {
     const parts = lines[i].trim().split(/\s+/)
     if (parts[0] === 'FLAG') mode = parts[1] === 'long' ? 'long' : parts[1] === 'num' ? 'num' : 'char'
-    if (parts[0] !== 'SFX') continue
+    if (parts[0] !== 'SFX' && parts[0] !== 'PFX') continue
     if (parts.length !== 4 || !/^\d+$/.test(parts[3])) continue
-    const [, flag, , count] = parts
+    const [kind, flag, , count] = parts
     const entries = []
     for (let n = 0; n < Number(count); n++) {
       const rule = (lines[++i] || '').trim().split(/\s+/)
@@ -81,9 +87,10 @@ export function parseAffixes(affText) {
         : new RegExp(`${rule[4]}$`, 'u')
       entries.push({ strip, add: add === '0' ? '' : add, condition })
     }
-    rules.set(flag, entries)
+    if (kind === 'SFX') rules.set(flag, entries)
+    else if (entries.some((entry) => NEGATING_PREFIXES.has(entry.add))) negating.add(flag)
   }
-  return { mode, rules }
+  return { mode, rules, negating }
 }
 
 function applySuffix(word, entry) {
@@ -92,7 +99,7 @@ function applySuffix(word, entry) {
   return word.slice(0, word.length - entry.strip.length) + entry.add
 }
 
-export function expandHunspell(dicText, affixes) {
+export function expandHunspell(dicText, affixes, negatable = new Set()) {
   const forms = new Map()
   const lines = dicText.split(/\r?\n/)
   for (const line of lines.slice(/^\d+\s*$/.test(lines[0] || '') ? 1 : 0)) {
@@ -103,6 +110,7 @@ export function expandHunspell(dicText, affixes) {
     if (!isWord(word)) continue
     const flags = splitFlags(slash < 0 ? '' : head.slice(slash + 1), affixes.mode)
     const out = new Set([word])
+    if (flags.some((flag) => affixes.negating.has(flag))) negatable.add(word)
     for (const flag of flags) {
       for (const entry of affixes.rules.get(flag) || []) {
         const form = applySuffix(word, entry)
@@ -116,13 +124,15 @@ export function expandHunspell(dicText, affixes) {
   return forms
 }
 
-export function writeDictionary(lemmas, hunspellForms) {
+export function writeDictionary(lemmas, hunspellForms, negatable = new Set()) {
   const lines = []
   for (const [lemma, { gloss, forms }] of [...lemmas].sort(([a], [b]) => a.localeCompare(b, 'lt'))) {
     const all = new Set(forms)
     for (const form of hunspellForms.get(lemma) || []) all.add(form)
     all.delete(lemma)
-    lines.push([gloss.replace(/\s+/g, ' '), lemma, [...all].sort().join(' ')].join('\t'))
+    const columns = [gloss.replace(/\s+/g, ' '), lemma, [...all].sort().join(' ')]
+    if (negatable.has(lemma)) columns.push('ne')
+    lines.push(columns.join('\t'))
   }
   return lines.join('\n') + '\n'
 }
@@ -152,8 +162,9 @@ async function main() {
 
   const lemmas = readWiktionary(await readLines(work + 'lithuanian.jsonl'))
   const affixes = parseAffixes(readFileSync(work + 'lt.aff', 'utf8'))
-  const forms = expandHunspell(readFileSync(work + 'lt.dic', 'utf8'), affixes)
-  const out = writeDictionary(lemmas, forms)
+  const negatable = new Set()
+  const forms = expandHunspell(readFileSync(work + 'lt.dic', 'utf8'), affixes, negatable)
+  const out = writeDictionary(lemmas, forms, negatable)
 
   const target = root + 'Shared (Extension)/Resources/dictionary/'
   mkdirSync(target, { recursive: true })
