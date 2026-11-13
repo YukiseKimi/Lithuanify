@@ -60,8 +60,10 @@ look Lithuanian are left alone.
 
 | Path | Purpose |
 |------|---------|
-| `Shared (Extension)/Resources/content.js` | Page scanning, furigana rendering, scheduling, dictionary |
-| `Shared (Extension)/Resources/background.js` | Bridges JS ↔ native, gloss cache (IndexedDB) |
+| `Shared (Extension)/Resources/content.js` | Page scanning, furigana rendering, scheduling |
+| `Shared (Extension)/Resources/background.js` | Bridges JS ↔ native, gloss cache (IndexedDB), dictionary lookups |
+| `Shared (Extension)/Resources/dictionary/` | The built dictionary (`lt-en.tsv`) and its data licences |
+| `scripts/build-dictionary.mjs` | Builds the dictionary from Wiktionary and Hunspell lt_LT |
 | `Shared (Extension)/Resources/popup.*` | Toolbar popup UI |
 | `Shared (Extension)/SafariWebExtensionHandler.swift` | Native handler: the on-device model session |
 | `Packages/LithuanifyCore` | Gloss logic (prompt, jobs, parsing, cleaning) and its Swift tests |
@@ -94,6 +96,19 @@ JavaScript tests in `tests/js` (`node:test` with jsdom and fake-indexeddb),
 and builds the macOS and iOS targets. It stops at the first failure.
 `./scripts/check --tests-only` skips the two builds. The first run does an
 `npm ci`; the test libraries are for development only and do not ship.
+
+## Dictionary data
+
+The dictionary has one line per Lithuanian lemma: its short English meaning, the lemma, and every inflected form. To build it again:
+
+```bash
+node scripts/build-dictionary.mjs
+```
+
+The script downloads its sources into `build/dictionary` (about 85 MB, ignored by git) and writes `Shared (Extension)/Resources/dictionary/`.
+
+- English meanings and word forms: [Wiktionary](https://en.wiktionary.org), extracted by [Wiktextract](https://kaikki.org/dictionary/Lithuanian/), under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+- More word forms: the [Hunspell lt_LT](https://github.com/LibreOffice/dictionaries/tree/master/lt_LT) word list from LibreOffice, under the licence in `LICENSE-hunspell-lt.txt`.
 
 ## Requirements
 

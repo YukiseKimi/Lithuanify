@@ -50,5 +50,13 @@
     "popup_hint": {
         "message": "Translations appear in small letters above recognised Lithuanian words. Choose whether to translate the whole page, only the paragraph you rest the pointer on, or only text you highlight. On-device AI uses Apple Intelligence for context-aware meanings — private and free. Dictionary meanings appear instantly; the AI fills in the rest. Nothing leaves your device.",
         "description": "Popup: explanation at the bottom."
+    },
+    "popup_credits": {
+        "message": "Dictionary: Wiktionary (CC BY-SA 4.0) and the Hunspell lt_LT word list.",
+        "description": "Popup: credit line for the dictionary data."
+    },
+    "popup_credits_link": {
+        "message": "Sources",
+        "description": "Popup: link to the dictionary data's source page."
     }
 }

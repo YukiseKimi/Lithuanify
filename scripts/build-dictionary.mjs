@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url'
 const SOURCES = {
   wiktionary: 'https://kaikki.org/dictionary/Lithuanian/kaikki.org-dictionary-Lithuanian.jsonl',
   dic: 'https://raw.githubusercontent.com/LibreOffice/dictionaries/master/lt_LT/lt.dic',
-  aff: 'https://raw.githubusercontent.com/LibreOffice/dictionaries/master/lt_LT/lt.aff'
+  aff: 'https://raw.githubusercontent.com/LibreOffice/dictionaries/master/lt_LT/lt.aff',
+  copying: 'https://raw.githubusercontent.com/LibreOffice/dictionaries/master/lt_LT/COPYING',
+  authors: 'https://raw.githubusercontent.com/LibreOffice/dictionaries/master/lt_LT/AUTHORS'
 }
 const MAX_GLOSS_WORDS = 3
 const SKIPPED_POS = new Set(['name', 'character', 'symbol', 'abbrev', 'suffix', 'prefix', 'phrase', 'proverb'])
@@ -165,6 +167,8 @@ async function main() {
   await download(SOURCES.wiktionary, work + 'lithuanian.jsonl')
   await download(SOURCES.dic, work + 'lt.dic')
   await download(SOURCES.aff, work + 'lt.aff')
+  await download(SOURCES.copying, work + 'COPYING')
+  await download(SOURCES.authors, work + 'AUTHORS')
 
   const lemmas = readWiktionary(await readLines(work + 'lithuanian.jsonl'))
   const affixes = parseAffixes(readFileSync(work + 'lt.aff', 'utf8'))
@@ -174,6 +178,14 @@ async function main() {
   const target = root + 'Shared (Extension)/Resources/dictionary/'
   mkdirSync(target, { recursive: true })
   writeFileSync(target + 'lt-en.tsv', out)
+  writeFileSync(target + 'LICENSE-hunspell-lt.txt',
+    readFileSync(work + 'AUTHORS', 'utf8') + '\n' + readFileSync(work + 'COPYING', 'utf8'))
+  writeFileSync(target + 'LICENSE-wiktionary.txt', [
+    'English meanings and word forms: Wiktionary (https://en.wiktionary.org),',
+    'extracted by Wiktextract (https://kaikki.org/dictionary/Lithuanian/).',
+    'Licensed under CC BY-SA 4.0: https://creativecommons.org/licenses/by-sa/4.0/',
+    ''
+  ].join('\n'))
   console.log(`${lemmas.size} lemmas, ${(out.length / 1e6).toFixed(1)} MB → ${target}lt-en.tsv`)
 }
 

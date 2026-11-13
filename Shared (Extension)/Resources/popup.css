@@ -123,6 +123,17 @@ h1 {
     .status.warn { color: #e0a458; }
 }
 
+.credits {
+    margin: 12px 0 0;
+    font-size: 11px;
+    line-height: 1.4;
+    opacity: 0.55;
+}
+
+.credits a {
+    color: inherit;
+}
+
 .hint {
     margin: 12px 0 0;
     font-size: 11px;
