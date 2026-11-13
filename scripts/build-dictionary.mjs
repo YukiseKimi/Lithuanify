@@ -11,9 +11,15 @@ const SOURCES = {
   authors: 'https://raw.githubusercontent.com/LibreOffice/dictionaries/master/lt_LT/AUTHORS'
 }
 const MAX_GLOSS_WORDS = 3
-const SKIPPED_POS = new Set(['name', 'character', 'symbol', 'abbrev', 'suffix', 'prefix', 'phrase', 'proverb'])
+const MAX_MEANINGS = 3
+const MAX_PHRASE_WORDS = 3
+const SKIPPED_POS = new Set(['name', 'character', 'symbol', 'abbrev', 'suffix', 'prefix', 'proverb'])
 
 const isWord = (text) => /^[a-ząčęėįšųūž]+$/.test(text)
+const isHeadword = (text) => {
+  const parts = text.split(' ')
+  return parts.length <= MAX_PHRASE_WORDS && parts.every(isWord)
+}
 
 const STRESS_MARKS = /[\u0300\u0301\u0303]/g
 const withoutStress = (text) => text.normalize('NFD').replace(STRESS_MARKS, '').normalize('NFC')
@@ -34,24 +40,29 @@ export function readWiktionary(lines) {
     if (!line.trim()) continue
     const entry = JSON.parse(line)
     if (entry.lang_code !== 'lt' || SKIPPED_POS.has(entry.pos)) continue
-    const word = (entry.word || '').toLowerCase()
-    if (!isWord(word)) continue
-    let gloss = ''
+    const word = withoutStress((entry.word || '').toLowerCase().trim())
+    if (!isHeadword(word)) continue
+    const glosses = []
     for (const sense of entry.senses || []) {
       if (Array.isArray(sense.form_of) && sense.form_of.length) {
         for (const target of sense.form_of) formOf.push([word, (target.word || '').toLowerCase()])
         continue
       }
-      if (!gloss) gloss = shortGloss((sense.glosses || [])[0] || '')
+      const gloss = shortGloss((sense.glosses || [])[0] || '')
+      if (gloss) glosses.push(gloss)
     }
-    if (!gloss) continue
-    const known = lemmas.get(word)
-    const forms = known ? known.forms : new Set()
-    for (const form of entry.forms || []) {
-      const text = withoutStress((form.form || '').toLowerCase())
-      if (isWord(text) && text !== word) forms.add(text)
+    if (!glosses.length) continue
+    const known = lemmas.get(word) || { meanings: [], forms: new Set() }
+    for (const gloss of glosses) {
+      if (known.meanings.length < MAX_MEANINGS && !known.meanings.includes(gloss)) known.meanings.push(gloss)
     }
-    if (!known) lemmas.set(word, { gloss, forms })
+    if (isWord(word)) {
+      for (const form of entry.forms || []) {
+        const text = withoutStress((form.form || '').toLowerCase())
+        if (isWord(text) && text !== word) known.forms.add(text)
+      }
+    }
+    lemmas.set(word, known)
   }
   for (const [form, lemma] of formOf) {
     const target = lemmas.get(lemma)
@@ -128,11 +139,11 @@ export function expandHunspell(dicText, affixes, negatable = new Set()) {
 
 export function writeDictionary(lemmas, hunspellForms, negatable = new Set()) {
   const lines = []
-  for (const [lemma, { gloss, forms }] of [...lemmas].sort(([a], [b]) => a.localeCompare(b, 'lt'))) {
+  for (const [lemma, { meanings, forms }] of [...lemmas].sort(([a], [b]) => a.localeCompare(b, 'lt'))) {
     const all = new Set(forms)
     for (const form of hunspellForms.get(lemma) || []) all.add(form)
     all.delete(lemma)
-    const columns = [gloss.replace(/\s+/g, ' '), lemma, [...all].sort().join(' ')]
+    const columns = [meanings.map((m) => m.replace(/[\s|]+/g, ' ')).join('|'), lemma, [...all].sort().join(' ')]
     if (negatable.has(lemma)) columns.push('ne')
     lines.push(columns.join('\t'))
   }

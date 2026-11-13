@@ -1,7 +1,9 @@
-{"word":"knyga","lang_code":"lt","pos":"noun","senses":[{"glosses":["book (written work)"]}],"forms":[{"form":"knygos","tags":["genitive"]},{"form":"knygą","tags":["accusative"]},{"form":"-","tags":["table-tags"]}]}
+{"word":"knyga","lang_code":"lt","pos":"noun","senses":[{"glosses":["book (written work)"]},{"glosses":["volume"]},{"glosses":["book, tome"]},{"glosses":["ledger"]},{"glosses":["register"]}],"forms":[{"form":"knygos","tags":["genitive"]},{"form":"knygą","tags":["accusative"]},{"form":"-","tags":["table-tags"]}]}
 {"word":"knygoje","lang_code":"lt","pos":"noun","senses":[{"glosses":["locative singular of knyga"],"form_of":[{"word":"knyga"}]}]}
 {"word":"skaityti","lang_code":"lt","pos":"verb","senses":[{"glosses":["to read; to count"]}],"forms":[{"form":"skaĩtau"}]}
 {"word":"Vilnius","lang_code":"lt","pos":"name","senses":[{"glosses":["Vilnius (capital)"]}]}
 {"word":"book","lang_code":"en","pos":"noun","senses":[{"glosses":["knyga"]}]}
 {"word":"gaisras","lang_code":"lt","pos":"noun","senses":[{"glosses":["fire, blaze"]},{"glosses":["conflagration"]}]}
 {"word":"gaisras","lang_code":"lt","pos":"verb","senses":[{"glosses":["burning"]}],"forms":[{"form":"gaisrą"}]}
+{"word":"vis dėlto","lang_code":"lt","pos":"phrase","senses":[{"glosses":["nevertheless"]}]}
+{"word":"kas tau darbo kad","lang_code":"lt","pos":"phrase","senses":[{"glosses":["none of your business"]}]}

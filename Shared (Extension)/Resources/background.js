@@ -248,7 +248,7 @@ const AMBIGUOUS = null;
 function parseDictionary(text) {
     const byWord = new Map();
     const lemmas = text.split("\n").map((line) => line.split("\t")).filter((cols) => cols.length >= 2)
-        .map(([gloss, lemma, forms = "", ne]) => ({ lemma, forms, entry: { gloss, ne: ne === "ne" } }));
+        .map(([glosses, lemma, forms = "", ne]) => ({ lemma, forms, entry: { gloss: glosses.split("|")[0], ne: ne === "ne" } }));
     for (const { lemma, entry } of lemmas) {
         const known = byWord.get(lemma);
         if (known === undefined) byWord.set(lemma, entry);
