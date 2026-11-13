@@ -129,3 +129,29 @@ test('the page keeps at most 20000 looked-up words', async () => {
   assert.equal(new Set(words).size, 20050)
   assert.ok(page.state('meanings.size') <= 20000)
 })
+
+test('a word with several meanings shows the first, and the model may replace it', async () => {
+  let answer
+  const reply = new Promise((resolve) => { answer = resolve })
+  const page = await loadContent(lt('<p>Kasa uždaryta.</p>'), {
+    dictionary: { kasa: ['cash register', 'braid'] }, gloss: () => reply
+  })
+  await waitFor(() => page.glossCalls() === 1)
+  assert.deepEqual(page.glosses(), [['Kasa', 'cash register']])
+  assert.deepEqual(page.sent[0], [{
+    text: 'Kasa uždaryta.', words: ['kasa', 'uždaryta'],
+    hints: [{ lemma: null, options: ['cash register', 'braid'] }, null]
+  }])
+  answer([{ kasa: 'braid', uždaryta: 'G:uždaryta' }])
+  await page.settle()
+  assert.deepEqual(page.glosses(), [['Kasa', 'braid'], ['uždaryta', 'G:uždaryta']])
+})
+
+test('with the AI off, a word with several meanings keeps its first meaning', async () => {
+  const page = await loadContent(lt('<p>Kasa uždaryta.</p>'), {
+    dictionary: { kasa: ['cash register', 'braid'] }, modelAvailable: false
+  })
+  await page.settle()
+  assert.deepEqual(page.glosses(), [['Kasa', 'cash register']])
+  assert.equal(page.glossCalls(), 0)
+})

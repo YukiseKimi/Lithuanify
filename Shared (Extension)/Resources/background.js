@@ -191,7 +191,9 @@ async function handleGloss(blocks) {
 
     const failed = new Set();
     if (need.size) {
-        const sent = [...need.values()].map((b) => ({ text: b.text, words: b.words }));
+        const sent = [...need.values()].map((b) => (Array.isArray(b.hints)
+            ? { text: b.text, words: b.words, hints: b.hints }
+            : { text: b.text, words: b.words }));
         let resp = null;
         try {
             resp = await browser.runtime.sendNativeMessage(NATIVE_APP_ID, {
@@ -243,40 +245,46 @@ const MARKED = /[ąčęėįšųūž]/;
 const foldWord = (word) => word.replace(/[ąčęėįšųūž]/g, (c) => DIACRITICS[c]);
 let dictionaryPromise = null;
 
-const AMBIGUOUS = null;
+const MAX_OPTIONS = 4;
+
+function merge(a, b) {
+    if (a === b) return a;
+    return {
+        m: [...new Set([...a.m, ...b.m])].slice(0, MAX_OPTIONS),
+        l: a.l === b.l ? a.l : null,
+        ne: a.ne && b.ne
+    };
+}
 
 function parseDictionary(text) {
     const byWord = new Map();
     const lemmas = text.split("\n").map((line) => line.split("\t")).filter((cols) => cols.length >= 2)
-        .map(([glosses, lemma, forms = "", ne]) => ({ lemma, forms, entry: { gloss: glosses.split("|")[0], ne: ne === "ne" } }));
-    for (const { lemma, entry } of lemmas) {
-        const known = byWord.get(lemma);
-        if (known === undefined) byWord.set(lemma, entry);
-        else if (known !== AMBIGUOUS && known.gloss !== entry.gloss) byWord.set(lemma, AMBIGUOUS);
-    }
+        .map(([glosses, lemma, forms = "", ne]) => ({ lemma, forms, entry: { m: glosses.split("|"), l: lemma, ne: ne === "ne" } }));
+    const add = (word, entry) => {
+        const known = byWord.get(word);
+        byWord.set(word, known ? merge(known, entry) : entry);
+    };
+    for (const { lemma, entry } of lemmas) add(lemma, entry);
     const headwords = new Set(byWord.keys());
     for (const { forms, entry } of lemmas) {
         for (const form of forms.split(" ")) {
-            if (!form || headwords.has(form)) continue;
-            const known = byWord.get(form);
-            if (known === undefined) byWord.set(form, entry);
-            else if (known !== AMBIGUOUS && known.gloss !== entry.gloss) byWord.set(form, AMBIGUOUS);
+            if (form && !headwords.has(form)) add(form, entry);
         }
     }
     const unmarked = new Map();
     for (const [word, entry] of byWord) {
-        if (entry === AMBIGUOUS || !MARKED.test(word)) continue;
+        if (!MARKED.test(word)) continue;
         const key = foldWord(word);
         if (byWord.has(key)) continue;
         const known = unmarked.get(key);
-        if (known === undefined) unmarked.set(key, entry);
-        else if (known !== AMBIGUOUS && known.gloss !== entry.gloss) unmarked.set(key, AMBIGUOUS);
+        unmarked.set(key, known ? merge(known, entry) : entry);
     }
     return { byWord, unmarked, size: byWord.size };
 }
 
 function entryOf(meanings, word) {
-    if (meanings.byWord.has(word)) return meanings.byWord.get(word);
+    const entry = meanings.byWord.get(word);
+    if (entry) return entry;
     if (MARKED.test(word)) return null;
     return meanings.unmarked.get(word) || null;
 }
@@ -299,11 +307,11 @@ const NEGATIONS = ["nebe", "ne"];
 
 function meaningOf(meanings, word) {
     const entry = entryOf(meanings, word);
-    if (entry) return entry.gloss;
+    if (entry) return { m: entry.m, l: entry.l };
     for (const prefix of NEGATIONS) {
         if (!word.startsWith(prefix) || word.length <= prefix.length + 2) continue;
         const base = entryOf(meanings, word.slice(prefix.length));
-        if (base && base.ne) return "not " + base.gloss;
+        if (base && base.ne) return { m: base.m.map((meaning) => "not " + meaning), l: base.l };
     }
     return null;
 }
@@ -314,8 +322,8 @@ async function handleLookup(words) {
     for (const word of words) {
         if (typeof word !== "string") continue;
         const lower = word.toLowerCase();
-        const gloss = meaningOf(meanings, lower);
-        if (gloss) found[word] = gloss;
+        const entry = meaningOf(meanings, lower);
+        if (entry) found[word] = entry;
     }
     return found;
 }

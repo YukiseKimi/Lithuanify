@@ -72,8 +72,18 @@ function isWordToken(token) {
 const MEANINGS_MAX = 20000;
 let meanings = new Map();
 
-function dictLookup(word) {
+function entryFor(word) {
     return meanings.get(word.toLowerCase()) || null;
+}
+
+function dictLookup(word) {
+    const entry = entryFor(word);
+    return entry ? entry.m[0] : null;
+}
+
+function needsPick(word) {
+    const entry = entryFor(word);
+    return !!entry && entry.m.length > 1 && aiActive();
 }
 
 async function learnWords(items) {
@@ -123,7 +133,7 @@ function isCandidate(token, gloss) {
 // Replace a text node with ruby elements for the glossed tokens. Unglossed
 // words get their own text node so a later gloss can replace just that word;
 // other runs of text are merged. Returns those candidate parts.
-function splitNode(node, tokens, glosses) {
+function splitNode(node, tokens, glosses, picks = new Set()) {
     const fragment = document.createDocumentFragment();
     const candidates = [];
     let run = "";
@@ -138,7 +148,9 @@ function splitNode(node, tokens, glosses) {
         const gloss = glosses[i];
         if (gloss) {
             flushRun();
-            fragment.appendChild(makeRuby(token, gloss));
+            const ruby = makeRuby(token, gloss);
+            fragment.appendChild(ruby);
+            if (picks.has(token.toLowerCase())) candidates.push({ token, lower: token.toLowerCase(), el: ruby });
         } else if (isCandidate(token, gloss)) {
             flushRun();
             const t = document.createTextNode(token);
@@ -163,19 +175,24 @@ function renderBlock(node) {
     const glosses = tokens.map((t) => (isWordToken(t) ? dictLookup(t) : null));
 
     const unknown = [];
+    const picks = new Set();
     const seen = new Set();
     tokens.forEach((t, i) => {
-        if (!isCandidate(t, glosses[i])) return;
+        const pick = glosses[i] && needsPick(t);
+        if (!pick && !isCandidate(t, glosses[i])) return;
         const lower = t.toLowerCase();
+        if (pick) picks.add(lower);
         if (!seen.has(lower)) {
             seen.add(lower);
             unknown.push(lower);
         }
     });
+    const hints = unknown.map((w) => (picks.has(w) ? { lemma: entryFor(w).l, options: entryFor(w).m } : null));
 
     const record = { node, text, context: contextOf.get(node) || text, unknown, parts: null };
+    if (picks.size) record.hints = hints;
     if (glosses.some(Boolean)) {
-        record.parts = splitNode(node, tokens, glosses);
+        record.parts = splitNode(node, tokens, glosses, picks);
     } else {
         ownNodes.add(node);  // done with it; don't re-scan on later mutations
     }
@@ -196,7 +213,8 @@ function applyRefinement(record, glossMap) {
     for (const part of record.parts) {
         const gloss = glossMap[part.lower];
         if (!gloss || !part.el.parentNode) continue;
-        part.el.parentNode.replaceChild(makeRuby(part.token, gloss), part.el);
+        if (part.el.nodeName === "RUBY") part.el.lastChild.textContent = gloss;
+        else part.el.parentNode.replaceChild(makeRuby(part.token, gloss), part.el);
     }
 }
 
@@ -454,7 +472,9 @@ async function pumpRefine() {
             sortQueue(refineQueue);
             const batch = takeRefineBatch();
             const records = batch.flatMap((item) => item.records);
-            const blocks = records.map((r) => ({ text: r.context, words: r.unknown }));
+            const blocks = records.map((r) => (r.hints
+                ? { text: r.context, words: r.unknown, hints: r.hints }
+                : { text: r.context, words: r.unknown }));
 
             let res = null;
             try {

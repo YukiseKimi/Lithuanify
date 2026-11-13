@@ -51,7 +51,8 @@ export async function loadContent(html, { mode = 'page', modelAvailable = true, 
         if (message.command === 'lookup') {
           lookups.push(plain(message.words))
           if (lookups.length <= lookupFailures) throw new Error('background gone')
-          return Object.fromEntries(message.words.filter((w) => w in dictionary).map((w) => [w, dictionary[w]]))
+          return Object.fromEntries(message.words.filter((w) => w in dictionary)
+            .map((w) => [w, { m: [].concat(dictionary[w]), l: null }]))
         }
         if (message.command === 'gloss') {
           glossCalls += 1

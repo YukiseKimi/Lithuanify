@@ -123,6 +123,8 @@ test('a save on a closed cache connection keeps its entries for the next save', 
   assert.equal(fresh.nativeCalls.length, 0)
 })
 
+const firsts = (found) => Object.fromEntries(Object.entries(found).map(([word, entry]) => [word, entry.m.join('|')]))
+
 const sample = [
   'book\tknyga\tknygoje knygos knygą',
   'read\tskaityti\tskaitau skaito skaičiau\tne',
@@ -138,60 +140,65 @@ const sample = [
 
 test('a lookup finds the meaning of a lemma, an inflected form and a spelling without diacritics', async () => {
   const bg = load({ dictionary: sample })
-  const found = await bg.lookup(['Knygoje', 'skaitau', 'knyga', 'zinios', 'nežinomas'])
+  const found = firsts(await bg.lookup(['Knygoje', 'skaitau', 'knyga', 'zinios', 'nežinomas']))
   assert.deepEqual(found, { Knygoje: 'book', skaitau: 'read', knyga: 'book', zinios: 'news' })
 })
 
 test('a headword wins over the same spelling as a form of another word', async () => {
   const bg = load({ dictionary: sample })
-  assert.deepEqual(await bg.lookup(['knygos']), { knygos: 'of the book' })
+  assert.deepEqual(firsts(await bg.lookup(['knygos'])), { knygos: 'of the book' })
 })
 
 test('the dictionary file is read once for many lookups', async () => {
   const bg = load({ dictionary: sample })
   await Promise.all([bg.lookup(['knyga']), bg.lookup(['gaisro'])])
-  await bg.lookup(['skaito'])
+  firsts(await bg.lookup(['skaito']))
   assert.deepEqual(bg.fetches, ['safari-web-extension://lithuanify/dictionary/lt-en.tsv'])
 })
 
 test('a missing dictionary file gives no meanings and no error', async () => {
   const bg = load({ dictionary: null })
-  assert.deepEqual(await bg.lookup(['knyga']), {})
+  assert.deepEqual(firsts(await bg.lookup(['knyga'])), {})
 })
 
 test('a negated word gets "not" before the meaning of the word after ne or nebe', async () => {
   const bg = load({ dictionary: sample })
-  assert.deepEqual(await bg.lookup(['neskaitau', 'nebeskaito', 'nesu']), { neskaitau: 'not read', nebeskaito: 'not read' })
+  assert.deepEqual(firsts(await bg.lookup(['neskaitau', 'nebeskaito', 'nesu'])), { neskaitau: 'not read', nebeskaito: 'not read' })
 })
 
 test('ne is read as "not" only before a word that Hunspell lets take it', async () => {
   const bg = load({ dictionary: sample })
-  assert.deepEqual(await bg.lookup(['nežinios', 'negaisro']), {})
+  assert.deepEqual(firsts(await bg.lookup(['nežinios', 'negaisro'])), {})
 })
 
-test('a form of two lemmas with different meanings gets no dictionary meaning', async () => {
+test('a form of two lemmas gets the meanings of both, for the model to pick', async () => {
   const bg = load({ dictionary: sample })
-  assert.deepEqual(await bg.lookup(['skaičiau', 'skaičiaus', 'skaito']), { skaičiaus: 'number', skaito: 'read' })
+  assert.deepEqual(firsts(await bg.lookup(['skaičiau', 'skaičiaus', 'skaito'])), { skaičiau: 'read|number', skaičiaus: 'number', skaito: 'read' })
 })
 
 test('a dictionary file that failed to load is read again on the next lookup', async () => {
   const bg = load({ dictionary: sample, fetchFailures: 1 })
-  assert.deepEqual(await bg.lookup(['knyga']), {})
-  assert.deepEqual(await bg.lookup(['knyga']), { knyga: 'book' })
+  assert.deepEqual(firsts(await bg.lookup(['knyga'])), {})
+  assert.deepEqual(firsts(await bg.lookup(['knyga'])), { knyga: 'book' })
 })
 
 test('a word that starts with nebe but negates with ne still gets "not"', async () => {
   const bg = load({ dictionary: sample })
-  assert.deepEqual(await bg.lookup(['nebendras']), { nebendras: 'not common' })
+  assert.deepEqual(firsts(await bg.lookup(['nebendras'])), { nebendras: 'not common' })
 })
 
 test('a word with diacritics never takes the meaning of another word spelled without them', async () => {
   const bg = load({ dictionary: sample })
-  assert.deepEqual(await bg.lookup(['gaisrą', 'kąsa']), {})
-  assert.deepEqual(await bg.lookup(['gaisro', 'zinia']), { gaisro: 'fire', zinia: 'news' })
+  assert.deepEqual(firsts(await bg.lookup(['gaisrą', 'kąsa'])), {})
+  assert.deepEqual(firsts(await bg.lookup(['gaisro', 'zinia'])), { gaisro: 'fire', zinia: 'news' })
 })
 
-test('two lemmas with the same headword and different meanings give that headword no meaning', async () => {
+test('two lemmas with the same headword give it both meanings', async () => {
   const bg = load({ dictionary: sample })
-  assert.deepEqual(await bg.lookup(['kasa', 'kasos', 'kasų']), { kasos: 'cash register', kasų: 'braid' })
+  assert.deepEqual(firsts(await bg.lookup(['kasa', 'kasos', 'kasų'])), { kasa: 'cash register|braid', kasos: 'cash register', kasų: 'braid' })
+})
+
+test('a lookup gives every meaning of a word and its lemma', async () => {
+  const bg = load({ dictionary: 'braid|pancreas|cash register\tkasa\tkasos\n' })
+  assert.deepEqual(await bg.lookup(['kasos']), { kasos: { m: ['braid', 'pancreas', 'cash register'], l: 'kasa' } })
 })
