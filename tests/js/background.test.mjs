@@ -77,12 +77,13 @@ test('an old open cache version does not hang a request', async () => {
     request.onupgradeneeded = () => request.result.createObjectStore('glosses', { keyPath: 'k' })
     request.onsuccess = () => resolve(request.result)
   })
-  const bg = load({ native: reply })
-
-  const result = await bg.gloss([{ text: 'Labas pasauli.', words: ['pasauli'] }])
-  old.close()
-
-  assert.deepEqual(result.results, [{ pasauli: 'G:pasauli' }])
+  try {
+    const bg = load({ native: reply })
+    const result = await bg.gloss([{ text: 'Labas pasauli.', words: ['pasauli'] }])
+    assert.deepEqual(result.results, [{ pasauli: 'G:pasauli' }])
+  } finally {
+    old.close()
+  }
 })
 
 test('the model being off is reported to the page', async () => {

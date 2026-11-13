@@ -63,7 +63,10 @@ look Lithuanian are left alone.
 | `Shared (Extension)/Resources/content.js` | Page scanning, furigana rendering, scheduling, dictionary |
 | `Shared (Extension)/Resources/background.js` | Bridges JS ↔ native, gloss cache (IndexedDB) |
 | `Shared (Extension)/Resources/popup.*` | Toolbar popup UI |
-| `Shared (Extension)/SafariWebExtensionHandler.swift` | Native handler running on-device translation |
+| `Shared (Extension)/SafariWebExtensionHandler.swift` | Native handler: the on-device model session |
+| `Packages/LithuanifyCore` | Gloss logic (prompt, jobs, parsing, cleaning) and its Swift tests |
+| `tests/js` | Tests for `content.js` and `background.js` |
+| `scripts/check` | Runs every test and both builds |
 | `Shared (App)/` | Container app that hosts and enables the extension |
 
 ## Building & running
@@ -77,6 +80,20 @@ look Lithuanian are left alone.
 5. **Settings → Extensions →** enable **Lithuanify** and allow it on every website.
 6. Visit a Lithuanian page (e.g. `lt.wikipedia.org`) — English glosses appear
    above recognised words.
+
+## Checks
+
+Run one command before each commit:
+
+```bash
+./scripts/check
+```
+
+It runs the Swift tests of `Packages/LithuanifyCore` (Swift Testing), the
+JavaScript tests in `tests/js` (`node:test` with jsdom and fake-indexeddb),
+and builds the macOS and iOS targets. It stops at the first failure.
+`./scripts/check --tests-only` skips the two builds. The first run does an
+`npm ci`; the test libraries are for development only and do not ship.
 
 ## Requirements
 

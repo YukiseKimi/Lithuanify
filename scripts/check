@@ -1,0 +1,41 @@
+#!/bin/bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+start=$(date +%s)
+
+step() { printf '\n== %s\n' "$1"; }
+pass() { printf '✔ %s\n' "$1"; }
+
+if [[ -z "${DEVELOPER_DIR:-}" ]] && [[ "$(xcode-select -p 2>/dev/null)" == *CommandLineTools* ]]; then
+    xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | head -1 || true)
+    if [[ -z "$xcode" ]]; then
+        echo "No Xcode found in /Applications. Install Xcode, or set DEVELOPER_DIR." >&2
+        exit 1
+    fi
+    export DEVELOPER_DIR="$xcode/Contents/Developer"
+fi
+
+step "Swift tests (LithuanifyCore)"
+swift test --package-path Packages/LithuanifyCore
+pass "swift test"
+
+step "JavaScript tests"
+if [[ ! -d node_modules ]]; then
+    npm ci --no-audit --no-fund
+fi
+npm test --silent
+pass "npm test"
+
+if [[ "${1:-}" != "--tests-only" ]]; then
+    for target in "Lithuanify (macOS)|generic/platform=macOS" "Lithuanify (iOS)|generic/platform=iOS Simulator"; do
+        scheme="${target%%|*}"
+        destination="${target##*|}"
+        step "Build $scheme"
+        xcodebuild -project Lithuanify.xcodeproj -scheme "$scheme" -destination "$destination" \
+            -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO -quiet build
+        pass "xcodebuild $scheme"
+    done
+fi
+
+printf '\nAll checks passed in %ss\n' "$(( $(date +%s) - start ))"
