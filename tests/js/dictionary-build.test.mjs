@@ -57,3 +57,11 @@ test('a lemma takes the best frequency rank of any of its forms', () => {
   assert.equal(lines[1], 'book|volume|ledger\tknyga\tknygoje knygomis knygos knygą\t\t2')
   assert.equal(lines[2], 'read\tskaityti\tskaitau')
 })
+
+test('a form with a stressed i keeps its word: the dot Wiktionary puts over a stressed i goes, the dot of ė stays', () => {
+  const lemmas = readWiktionary([JSON.stringify({
+    word: 'gimti', lang_code: 'lt', pos: 'verb', senses: [{ glosses: ['to be born'] }],
+    forms: [{ form: 'gi̇̀msta', tags: ['present', 'third-person'] }, { form: 'gi̇̀mė', tags: ['past', 'third-person'] }]
+  })])
+  assert.deepEqual([...lemmas.get('gimti').forms].sort(), ['gimsta', 'gimė'])
+})
