@@ -207,6 +207,15 @@ test('a negated verb the dictionary knows with its prefix keeps its own meaning,
   assert.deepEqual(await bg.lookup(['nesuprantu']), { nesuprantu: { m: ['not understand'], l: 'suprasti', r: 0 } })
 })
 
+test('nesu, nesi, nėra and the other merged ne- forms of būti mean "not be", not a word spelled like them', async () => {
+  const bg = load({ dictionary: 'be\tbūti\tesu esi yra esame esate\tne\ncarry\tnešti\tnešu neši\tne\n' })
+  const found = await bg.lookup(['nesu', 'nesi', 'nėra', 'nesame', 'nesate', 'nešu'])
+  assert.deepEqual(firsts(found), {
+    nesu: 'not be', nesi: 'not be', nėra: 'not be', nesame: 'not be', nesate: 'not be', nešu: 'carry'
+  })
+  assert.equal(found.nėra.l, 'būti')
+})
+
 test('a word that starts with nebe but negates with ne still gets "not"', async () => {
   const bg = load({ dictionary: sample })
   assert.deepEqual(firsts(await bg.lookup(['nebendras'])), { nebendras: 'not common' })

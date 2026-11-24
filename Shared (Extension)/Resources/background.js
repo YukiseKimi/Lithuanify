@@ -358,7 +358,16 @@ function prefixedMeaning(meanings, word) {
 
 const negated = (entry) => ({ ...entry, m: entry.m.map((meaning) => "not " + meaning) });
 
+// ne- merges with the forms of būti that start with a vowel: ne + esu is
+// nesu, ne + yra is nėra. These come before any other lookup: spelled
+// without its marks, nesu would otherwise read as nešu ("I carry").
+const NEGATED_BE = { nesu: "esu", nesi: "esi", nesame: "esame", nesate: "esate", nesam: "esam", nesat: "esat", nėra: "yra" };
+
 function meaningOf(meanings, word) {
+    if (NEGATED_BE[word]) {
+        const be = entryOf(meanings, NEGATED_BE[word]);
+        if (be) return negated({ m: be.m, l: be.l || "būti", r: 0 });
+    }
     const entry = entryOf(meanings, word);
     if (entry) return { m: entry.m, l: entry.l, r: entry.r };
     for (const prefix of NEGATIONS) {
