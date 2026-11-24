@@ -24,6 +24,7 @@ ruby.lithuanify-ruby > rt {
     letter-spacing: 0;
     padding: 0 0.2em 1px;
     user-select: none;
+    cursor: pointer;  /* also lets iOS Safari send a tap on it to the page's click listener */
 }
 @supports (color: color-mix(in srgb, red, blue)) {
     ruby.lithuanify-ruby > rt {
@@ -64,6 +65,8 @@ let generation = 0;          // bumped on disable, so in-flight work is dropped
 // Text nodes Lithuanify split off itself. They are never re-scanned.
 let ownNodes = new WeakSet();
 let contextOf = new WeakMap();
+// What the word card shows for each gloss: ruby -> GlossInfo (see glossInfoFor).
+let glossInfo = new WeakMap();
 
 
 function isWordToken(token) {
@@ -162,13 +165,29 @@ function aiActive() {
 
 // --- Rendering --------------------------------------------------------------
 
-function makeRuby(token, gloss) {
+// The facts behind one gloss. `source` says where the gloss's meaning came
+// from: the dictionary's first meaning, an approximate one (a prefixed verb
+// read as its plain verb), or the on-device model.
+function glossInfoFor(token, gloss, context) {
+    const entry = entryFor(token);
+    const fromDictionary = !!entry && entry.m[0] === gloss;
+    return {
+        word: token,
+        lower: token.toLowerCase(),
+        entry,
+        context,
+        source: fromDictionary ? (entry.approx ? "approximate" : "dictionary") : "model"
+    };
+}
+
+function makeRuby(token, gloss, info) {
     const ruby = document.createElement("ruby");
     ruby.className = ANNOTATION_CLASS;
     ruby.appendChild(document.createTextNode(token));
     const rt = document.createElement("rt");
     rt.textContent = gloss;
     ruby.appendChild(rt);
+    glossInfo.set(ruby, info);
     return ruby;
 }
 
@@ -189,6 +208,7 @@ function isName(tokens, i) {
 function splitNode(node, tokens, glosses, picks = new Set()) {
     const fragment = document.createDocumentFragment();
     const candidates = [];
+    const context = contextOf.get(node) || node.nodeValue;
     let run = "";
     const flushRun = () => {
         if (!run) return;
@@ -201,15 +221,15 @@ function splitNode(node, tokens, glosses, picks = new Set()) {
         const gloss = glosses[i];
         if (gloss) {
             flushRun();
-            const ruby = makeRuby(token, gloss);
+            const ruby = makeRuby(token, gloss, glossInfoFor(token, gloss, context));
             fragment.appendChild(ruby);
-            if (picks.has(token.toLowerCase())) candidates.push({ token, lower: token.toLowerCase(), el: ruby });
+            if (picks.has(token.toLowerCase())) candidates.push({ token, lower: token.toLowerCase(), el: ruby, context });
         } else if (isCandidate(token, gloss)) {
             flushRun();
             const t = document.createTextNode(token);
             ownNodes.add(t);
             fragment.appendChild(t);
-            candidates.push({ token, lower: token.toLowerCase(), el: t });
+            candidates.push({ token, lower: token.toLowerCase(), el: t, context });
         } else {
             run += token;
         }
@@ -268,8 +288,13 @@ function applyRefinement(record, glossMap) {
     for (const part of record.parts) {
         const gloss = glossMap[part.lower];
         if (!gloss || !part.el.parentNode) continue;
-        if (part.el.nodeName === "RUBY") part.el.lastChild.textContent = gloss;
-        else part.el.parentNode.replaceChild(makeRuby(part.token, gloss), part.el);
+        if (part.el.nodeName === "RUBY") {
+            part.el.lastChild.textContent = gloss;
+            glossInfo.set(part.el, { ...glossInfo.get(part.el), source: "model" });
+        } else {
+            part.el.parentNode.replaceChild(
+                makeRuby(part.token, gloss, { ...glossInfoFor(part.token, gloss, part.context), source: "model" }), part.el);
+        }
     }
 }
 
@@ -625,6 +650,116 @@ function removeAnnotations() {
     parents.forEach((p) => p.normalize());
     ownNodes = new WeakSet();
     contextOf = new WeakMap();
+    glossInfo = new WeakMap();
+}
+
+// --- Word card --------------------------------------------------------------
+// A tap on a gloss opens a card with the word, its lemma and every meaning.
+// The card lives in a shadow root on <html>: the page's CSS cannot reach it,
+// and the MutationObserver on <body> does not see it.
+
+const CARD_CSS = `
+:host { all: initial; position: fixed; z-index: 2147483647; }
+:host([hidden]) { display: none; }
+.card {
+    --bg: #ffffff; --fg: #1c1b19; --muted: #77726a; --line: #e6e1d6; --accent: #2f62c8; --foot: #f8f6f1;
+    width: max-content; min-width: 180px; max-width: min(300px, calc(100vw - 16px));
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--fg); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+@media (prefers-color-scheme: dark) {
+    .card { --bg: #26282c; --fg: #ecebe8; --muted: #a29e96; --line: #3a3d42; --accent: #8fb1ff; --foot: #2c2f34; }
+}
+.head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 9px 12px 7px; border-bottom: 1px solid var(--line); }
+.word { font-weight: 650; font-size: 15px; }
+.form { color: var(--muted); }
+.rank { margin-left: auto; font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; }
+.meanings { margin: 0; padding: 8px 12px 8px 30px; }
+.meanings li.shown { font-weight: 650; color: var(--accent); }
+.foot { display: flex; justify-content: space-between; gap: 12px; padding: 7px 12px; border-top: 1px solid var(--line); background: var(--foot); border-radius: 0 0 10px 10px; color: var(--muted); font-size: 11px; }
+.foot:empty { display: none; }
+.foot a { color: var(--accent); text-decoration: none; }`;
+
+const CARD_GAP = 6;
+const CARD_MARGIN = 8;
+let cardHost = null;
+
+function cardElement() {
+    if (!cardHost) {
+        cardHost = document.createElement("div");
+        cardHost.id = "lithuanify-card";
+        const root = cardHost.attachShadow({ mode: "open" });
+        const style = document.createElement("style");
+        style.textContent = CARD_CSS;
+        const card = document.createElement("div");
+        card.className = "card";
+        root.append(style, card);
+    }
+    if (!cardHost.isConnected) document.documentElement.appendChild(cardHost);
+    return cardHost.shadowRoot.querySelector(".card");
+}
+
+function element(tag, className, text) {
+    const el = document.createElement(tag);
+    if (className) el.className = className;
+    if (text !== undefined) el.textContent = text;
+    return el;
+}
+
+// The badge for a word among the 500 or 2,000 most common (the popup's steps).
+function rankLabel(entry) {
+    if (!entry || !entry.r) return null;
+    if (entry.r <= 500) return "Top 500";
+    if (entry.r <= 2000) return "Top 2,000";
+    return null;
+}
+
+function openCard(ruby, info) {
+    const shown = ruby.lastChild.textContent;
+    const entry = info.entry;
+    const card = cardElement();
+
+    const head = element("div", "head");
+    head.append(element("span", "word", info.word));
+    if (entry && entry.l && entry.l !== info.lower) head.append(element("span", "form", `form of ${entry.l}`));
+    const rank = rankLabel(entry);
+    if (rank) head.append(element("span", "rank", rank));
+
+    const meanings = entry ? [...entry.m] : [];
+    if (!meanings.includes(shown)) meanings.unshift(shown);
+    const list = element("ol", "meanings");
+    for (const meaning of meanings) list.append(element("li", meaning === shown ? "shown" : "", meaning));
+
+    card.replaceChildren(head, list, element("div", "foot"));
+    cardHost.hidden = false;
+    placeCard(ruby.lastChild);
+}
+
+// Below the gloss, or above it when there is no room below; always on screen.
+function placeCard(anchor) {
+    const at = anchor.getBoundingClientRect();
+    const box = cardHost.shadowRoot.querySelector(".card").getBoundingClientRect();
+    const width = window.innerWidth || document.documentElement.clientWidth;
+    const height = window.innerHeight || document.documentElement.clientHeight;
+    const left = Math.max(CARD_MARGIN, Math.min(at.left, width - box.width - CARD_MARGIN));
+    let top = at.bottom + CARD_GAP;
+    if (top + box.height > height - CARD_MARGIN && at.top - CARD_GAP - box.height >= CARD_MARGIN) {
+        top = at.top - CARD_GAP - box.height;
+    }
+    cardHost.style.left = `${Math.round(left)}px`;
+    cardHost.style.top = `${Math.round(top)}px`;
+}
+
+function onGlossTap(event) {
+    const rt = event.target instanceof Element ? event.target.closest(`ruby.${ANNOTATION_CLASS} > rt`) : null;
+    const info = rt && glossInfo.get(rt.parentElement);
+    if (!info) return;
+    // The gloss opens its card; a gloss inside a link does not follow the link.
+    event.preventDefault();
+    event.stopPropagation();
+    openCard(rt.parentElement, info);
 }
 
 // Heuristic: is this page (mostly) Lithuanian? Non-Lithuanian pages are left
@@ -874,6 +1009,7 @@ async function enable() {
 
 async function start() {
     injectStyles();
+    document.addEventListener("click", onGlossTap, true);
     const gen = generation;
     if (smartEnabled) {
         try {
@@ -900,6 +1036,7 @@ function disable() {
     stopWatchingLanguage();
     stopObserver();
     stopOnDemand();
+    document.removeEventListener("click", onGlossTap, true);
     if (viewportObserver) {
         viewportObserver.disconnect();
         viewportObserver = null;

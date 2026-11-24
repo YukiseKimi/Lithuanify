@@ -117,6 +117,29 @@ export async function loadContent(html, { hideCommon = 0, mode = 'page', modelAv
       }
       storageListeners.forEach((listener) => listener(changes, 'local'))
     },
+    // Taps the gloss over the n-th ruby whose word is `word`; returns the click event.
+    tapGloss: (word, n = 0) => {
+      const ruby = [...window.document.querySelectorAll('ruby')].filter((r) => r.firstChild.textContent === word)[n]
+      const event = new window.MouseEvent('click', { bubbles: true, cancelable: true })
+      ruby.lastChild.dispatchEvent(event)
+      return event
+    },
+    // What the open word card shows, or null when no card is open.
+    card: () => {
+      const host = window.document.getElementById('lithuanify-card')
+      const root = host && host.shadowRoot
+      if (!root || host.hidden) return null
+      const text = (selector) => { const el = root.querySelector(selector); return el ? el.textContent : null }
+      return plain({
+        word: text('.word'),
+        form: text('.form'),
+        rank: text('.rank'),
+        meanings: [...root.querySelectorAll('.meanings li')].map((li) => li.textContent),
+        shown: text('.meanings li.shown'),
+        source: text('.source'),
+        link: root.querySelector('a.wiki') ? root.querySelector('a.wiki').href : null
+      })
+    },
     scrollTo: (selector) => {
       const el = window.document.querySelector(selector)
       for (const observer of observers) {

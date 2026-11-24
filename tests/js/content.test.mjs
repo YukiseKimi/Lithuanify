@@ -272,3 +272,48 @@ test('an approximate meaning shows at once and goes to the model with its lemma 
   await page.settle()
   assert.deepEqual(page.glosses(), [['Jis', 'he'], ['išvažiuoja', 'leaves']])
 })
+
+test('a tap on a gloss opens a card with the word, its lemma and every meaning, the shown one marked', async () => {
+  const page = await loadContent(lt('<p>Lietuvos šalies miestas.</p>'), {
+    dictionary: { šalies: { m: ['land', 'country', 'aside'], l: 'šalis' } }, modelAvailable: false
+  })
+  await page.settle()
+  assert.equal(page.card(), null)
+
+  page.tapGloss('šalies')
+  const card = page.card()
+  assert.equal(card.word, 'šalies')
+  assert.equal(card.form, 'form of šalis')
+  assert.deepEqual(card.meanings, ['land', 'country', 'aside'])
+  assert.equal(card.shown, 'land')
+})
+
+test('a tap on a gloss inside a link opens the card and does not follow the link', async () => {
+  const page = await loadContent(lt('<p><a href="https://example.lt/knyga">Aš skaitau knygą</a></p>'), { modelAvailable: false })
+  await page.settle()
+  const event = page.tapGloss('knygą')
+  assert.equal(event.defaultPrevented, true)
+  assert.equal(page.card().word, 'knygą')
+})
+
+test('the card of a common word shows how common it is', async () => {
+  const page = await loadContent(lt('<p>Aš skaitau knygą.</p>'), {
+    dictionary: { aš: { m: ['I'], r: 3 }, knygą: { m: ['book'], l: 'knyga', r: 1200 } }, modelAvailable: false
+  })
+  await page.settle()
+  page.tapGloss('Aš')
+  assert.equal(page.card().rank, 'Top 500')
+  page.tapGloss('knygą')
+  assert.equal(page.card().rank, 'Top 2,000')
+})
+
+test('a word the dictionary does not know shows the meaning in its gloss on its card', async () => {
+  const page = await loadContent(lt('<p>Aš skaitau.</p>'))
+  await page.settle()
+  page.tapGloss('skaitau')
+  const card = page.card()
+  assert.equal(card.word, 'skaitau')
+  assert.equal(card.form, null)
+  assert.deepEqual(card.meanings, ['G:skaitau'])
+  assert.equal(card.shown, 'G:skaitau')
+})
