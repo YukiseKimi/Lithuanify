@@ -11,7 +11,7 @@ const open = new Set()
 afterEach(() => { for (const window of open) window.close(); open.clear() })
 
 // The toolbar popup in jsdom, over a storage.local that holds `stored`.
-async function loadPopup(stored) {
+async function loadPopup(stored, { modelAvailable = true } = {}) {
   const dom = new JSDOM(html, { runScripts: 'dangerously' })
   const { window } = dom
   open.add(window)
@@ -21,7 +21,7 @@ async function loadPopup(stored) {
     i18n: { getMessage: () => '' },
     storage: { local: { get: async () => JSON.parse(JSON.stringify(stored)), set: async (values) => { Object.assign(stored, values) } } },
     runtime: {
-      sendMessage: async () => ({ available: false }),
+      sendMessage: async () => ({ available: modelAvailable }),
       getURL: (path) => 'safari-web-extension://lithuanify/' + path
     },
     tabs: { create: async (options) => { created.push(JSON.parse(JSON.stringify(options))) } }
@@ -70,4 +70,23 @@ test('the popup shows Google Translate as it was left, with its key', async () =
   assert.equal(popup.document.getElementById('google').checked, true)
   assert.equal(popup.document.getElementById('google-details').hidden, false)
   assert.equal(popup.document.getElementById('google-key').value, 'saved-key')
+})
+
+test('Google Translate needs the on-device AI: off or unavailable, the switch is greyed out and says why', async () => {
+  const popup = await loadPopup({ google: true, googleKey: 'k' })
+  const google = popup.document.getElementById('google')
+  const needs = popup.document.getElementById('google-needs-ai')
+  assert.equal(google.disabled, false)
+  assert.equal(needs.hidden, true)
+
+  const smart = popup.document.getElementById('smart')
+  smart.checked = false
+  smart.dispatchEvent(new popup.window.Event('change'))
+  assert.equal(google.disabled, true)
+  assert.equal(needs.hidden, false)
+  assert.equal(popup.document.getElementById('google-details').hidden, true)
+
+  const noModel = await loadPopup({ google: true, googleKey: 'k' }, { modelAvailable: false })
+  assert.equal(noModel.document.getElementById('google').disabled, true)
+  assert.equal(noModel.document.getElementById('google-needs-ai').hidden, false)
 })
