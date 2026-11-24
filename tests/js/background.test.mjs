@@ -185,8 +185,8 @@ test('a dictionary file that failed to load is read again on the next lookup', a
 test('a verb with a prefix the dictionary lacks gets the meaning of the verb without it, marked approximate', async () => {
   const bg = load({ dictionary: sample })
   assert.deepEqual(await bg.lookup(['perskaito', 'paskaitau']), {
-    perskaito: { m: ['read'], l: 'perskaityti', r: 0, approx: true },
-    paskaitau: { m: ['read'], l: 'paskaityti', r: 0, approx: true }
+    perskaito: { m: ['read'], l: 'perskaityti', r: 0, approx: true, from: 'skaityti' },
+    paskaitau: { m: ['read'], l: 'paskaityti', r: 0, approx: true, from: 'skaityti' }
   })
 })
 
@@ -198,7 +198,7 @@ test('a prefix is taken off only a word that Hunspell lets take ne, so nouns are
 test('a negated verb with a prefix gets "not" before the meaning of the verb', async () => {
   const bg = load({ dictionary: sample })
   assert.deepEqual(await bg.lookup(['neperskaito']), {
-    neperskaito: { m: ['not read'], l: 'perskaityti', r: 0, approx: true }
+    neperskaito: { m: ['not read'], l: 'perskaityti', r: 0, approx: true, from: 'skaityti' }
   })
 })
 

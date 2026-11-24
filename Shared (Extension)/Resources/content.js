@@ -716,6 +716,19 @@ function rankLabel(entry) {
     return null;
 }
 
+// Where the meaning in the gloss came from, in the words the card shows.
+function sourceLine(info, shown) {
+    const entry = info.entry;
+    if (info.source === "model") {
+        const n = entry ? entry.m.indexOf(shown) + 1 : 0;
+        return n ? `On-device AI picked meaning ${n}` : "On-device AI meaning";
+    }
+    if (info.source === "approximate") {
+        return entry && entry.from ? `Approximate: the meaning of ${entry.from}` : "Approximate meaning";
+    }
+    return "Dictionary";
+}
+
 function openCard(ruby, info) {
     const shown = ruby.lastChild.textContent;
     const entry = info.entry;
@@ -732,7 +745,10 @@ function openCard(ruby, info) {
     const list = element("ol", "meanings");
     for (const meaning of meanings) list.append(element("li", meaning === shown ? "shown" : "", meaning));
 
-    card.replaceChildren(head, list, element("div", "foot"));
+    const foot = element("div", "foot");
+    foot.append(element("span", "source", sourceLine(info, shown)));
+
+    card.replaceChildren(head, list, foot);
     cardHost.hidden = false;
     placeCard(ruby.lastChild);
 }

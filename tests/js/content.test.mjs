@@ -317,3 +317,30 @@ test('a word the dictionary does not know shows the meaning in its gloss on its 
   assert.deepEqual(card.meanings, ['G:skaitau'])
   assert.equal(card.shown, 'G:skaitau')
 })
+
+test('the card says where the meaning in the gloss came from', async () => {
+  let answer
+  const reply = new Promise((resolve) => { answer = resolve })
+  const page = await loadContent(lt('<p>Jis išvažiuoja į Kauną. Kasa uždaryta, sostinė graži.</p>'), {
+    dictionary: {
+      išvažiuoja: { m: ['go by vehicle'], l: 'išvažiuoti', approx: true, from: 'važiuoti' },
+      kasa: ['cash register', 'braid'],
+      sostinė: { m: ['capital'], l: 'sostinė' }
+    },
+    gloss: () => reply
+  })
+  await waitFor(() => page.glossCalls() === 1)
+  page.tapGloss('sostinė')
+  assert.equal(page.card().source, 'Dictionary')
+  page.tapGloss('išvažiuoja')
+  assert.equal(page.card().source, 'Approximate: the meaning of važiuoti')
+
+  answer([{ jis: 'he', išvažiuoja: 'leaves', kauną: 'Kaunas', kasa: 'braid', uždaryta: 'closed', graži: 'beautiful' }])
+  await page.settle()
+  page.tapGloss('Kasa')
+  assert.equal(page.card().source, 'On-device AI picked meaning 2')
+  page.tapGloss('išvažiuoja')
+  assert.equal(page.card().source, 'On-device AI meaning')
+  page.tapGloss('uždaryta')
+  assert.equal(page.card().source, 'On-device AI meaning')
+})
