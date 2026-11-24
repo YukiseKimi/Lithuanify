@@ -202,12 +202,19 @@ function glossInfoFor(token, gloss, context) {
     };
 }
 
+// WebKit on iPhone moves a tap onto the nearest element that listens for
+// clicks; next to a link, the link won over a gloss, whose only listener was
+// the document's. A listener on the gloss itself makes it a tap target of its
+// own. The document's capture listener (onGlossTap) does the work.
+const markTappable = () => {};
+
 function makeRuby(token, gloss, info) {
     const ruby = document.createElement("ruby");
     ruby.className = ANNOTATION_CLASS;
     ruby.appendChild(document.createTextNode(token));
     const rt = document.createElement("rt");
     rt.textContent = gloss;
+    rt.addEventListener("click", markTappable);
     ruby.appendChild(rt);
     glossInfo.set(ruby, info);
     return ruby;
