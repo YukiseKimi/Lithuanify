@@ -344,3 +344,29 @@ test('the card says where the meaning in the gloss came from', async () => {
   page.tapGloss('uždaryta')
   assert.equal(page.card().source, 'On-device AI meaning')
 })
+
+test('Escape, a tap outside the card, a scroll and turning Lithuanify off each close the card', async () => {
+  const page = await loadContent(lt('<p id="p">Aš skaitau knygą.</p>'), { modelAvailable: false })
+  await page.settle()
+  const { window, document } = page
+
+  page.tapGloss('knygą')
+  document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  assert.equal(page.card(), null)
+
+  page.tapGloss('knygą')
+  const inside = document.getElementById('lithuanify-card').shadowRoot.querySelector('.meanings li')
+  inside.dispatchEvent(new window.MouseEvent('click', { bubbles: true, composed: true }))
+  assert.equal(page.card().word, 'knygą')
+  document.getElementById('p').dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+  assert.equal(page.card(), null)
+
+  page.tapGloss('knygą')
+  document.dispatchEvent(new window.Event('scroll'))
+  assert.equal(page.card(), null)
+
+  page.tapGloss('Aš')
+  assert.equal(page.card().word, 'Aš')
+  page.changeSettings({ enabled: false })
+  await waitFor(() => page.card() === null)
+})

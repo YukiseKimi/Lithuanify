@@ -751,7 +751,23 @@ function openCard(ruby, info) {
     card.replaceChildren(head, list, foot);
     cardHost.hidden = false;
     placeCard(ruby.lastChild);
+    document.addEventListener("keydown", onCardKey, true);
+    document.addEventListener("scroll", closeCard, true);
 }
+
+// One card at most is open. It is placed for one spot on the screen, so any
+// scroll, anywhere on the page, closes it.
+function closeCard() {
+    document.removeEventListener("keydown", onCardKey, true);
+    document.removeEventListener("scroll", closeCard, true);
+    if (cardHost) cardHost.hidden = true;
+}
+
+function onCardKey(event) {
+    if (event.key === "Escape") closeCard();
+}
+
+const isCardOpen = () => !!cardHost && cardHost.isConnected && !cardHost.hidden;
 
 // Below the gloss, or above it when there is no room below; always on screen.
 function placeCard(anchor) {
@@ -771,7 +787,11 @@ function placeCard(anchor) {
 function onGlossTap(event) {
     const rt = event.target instanceof Element ? event.target.closest(`ruby.${ANNOTATION_CLASS} > rt`) : null;
     const info = rt && glossInfo.get(rt.parentElement);
-    if (!info) return;
+    if (!info) {
+        // A tap anywhere but on the card or a gloss closes the card.
+        if (isCardOpen() && !event.composedPath().includes(cardHost)) closeCard();
+        return;
+    }
     // The gloss opens its card; a gloss inside a link does not follow the link.
     event.preventDefault();
     event.stopPropagation();
@@ -1053,6 +1073,7 @@ function disable() {
     stopObserver();
     stopOnDemand();
     document.removeEventListener("click", onGlossTap, true);
+    closeCard();
     if (viewportObserver) {
         viewportObserver.disconnect();
         viewportObserver = null;
