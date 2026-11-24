@@ -16,6 +16,22 @@
 Lithuanian text on a page is annotated in place with `<ruby>` elements, so each
 word keeps its original form while a concise English gloss sits on top.
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/images/demo.gif" alt="Lithuanify in Safari on iPhone: glosses above an article, a word card, saving a word, the popup and the Saved words page" width="300">
+</p>
+
+| Glosses as you read | Word card | Toolbar popup | Saved words |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/images/ios-glosses.png" alt="English glosses above the Lithuanian words of an article" width="200"> | <img src="docs/images/ios-card.png" alt="The word card for metus: four dictionary meanings, the one the on-device AI picked, Save and Know it" width="200"> | <img src="docs/images/ios-popup.png" alt="The Lithuanify popup with its settings" width="200"> | <img src="docs/images/ios-saved-words.png" alt="The Saved words page with three words and their sentences" width="200"> |
+
+Safari on iPhone (iOS 27.3 Simulator), reading
+[*Po remonto atidaryta Vilniaus rotušė*](https://www.lrt.lt/naujienos/lrt-paprastai/69/3124115/po-remonto-atidaryta-vilniaus-rotuse)
+from LRT Paprastai, LRT.lt's section in easy-to-read Lithuanian. Glosses come
+from the dictionary and the on-device AI; Google Translate was off. They are
+real output, mistakes included.
+
 ## How translation works
 
 Lithuanify runs **entirely on your device**, in two tiers:
@@ -34,14 +50,60 @@ don't touch the model again. Pages that don't look Lithuanian are left alone.
 
 ### Optional: Google Translate as context
 
-Off by default. Turn it on in the toolbar popup and paste your own
-[Cloud Translation API](https://cloud.google.com/translate/docs/setup) key.
-Then each paragraph that goes to the on-device model is first translated
-into English by Google, and the model reads that translation to pick better
-meanings. **The text of those paragraphs goes to Google**; the dictionary
-glosses and everything else stay on the device. It needs the on-device AI,
-and the key stays in the extension's local storage and goes only to Google,
-in a request header. A Google error leaves the page glossed as without it.
+Apple's on-device model is much stronger in English than in Lithuanian. With
+Google Translate turned on, each paragraph that goes to the on-device model is
+first translated into English by Google, and the model reads that English
+sentence to pick a better meaning for each word. Glosses stay word by word;
+Google's translation is only context.
+
+**You need your own Google Cloud API key.** Lithuanify ships no key and no
+server, so the feature is off until you add one.
+
+- **Needs:** the on-device AI switched on and available (Apple Intelligence).
+  Without it the Google Translate switch is greyed out, because there is no
+  model to read the English.
+- **Privacy:** off by default. When on, **the text of each paragraph sent to the
+  on-device model goes to Google**. Dictionary glosses, saved words and
+  everything else stay on the device. Read
+  [Google's data use for Cloud Translation](https://cloud.google.com/translate/data-usage)
+  before you turn it on.
+- **Cost:** it uses Cloud Translation *Basic* (v2), billed per character. Google
+  gives a free monthly allowance (500,000 characters a month at the time of
+  writing); check the current [pricing](https://cloud.google.com/translate/pricing).
+  Daily reading usually stays inside it. A small budget alert in Google Cloud
+  billing is a good idea.
+
+#### Set up a key
+
+1. In the [Google Cloud console](https://console.cloud.google.com/), create a
+   project (or pick one) and attach a billing account. The API needs billing
+   even inside the free allowance.
+2. Enable the **Cloud Translation API** for that project.
+3. Open **APIs & Services → Credentials → Create credentials → API key**.
+4. Edit the key:
+   - **API restrictions:** *Restrict key* and select only **Cloud Translation
+     API**, so a leaked key can't be used for anything else.
+   - **Application restrictions:** leave **None**. *Websites* and *iOS apps*
+     would block Lithuanify, whose requests come from the extension, not from a
+     website or an app with a bundle header.
+5. In Safari, open the Lithuanify toolbar popup, turn on **Google Translate**,
+   and paste the key into the field under it.
+6. Open a new Lithuanian page. If Safari asks to allow Lithuanify on
+   `translation.googleapis.com`, allow it.
+
+The key stays in the extension's local storage on that device (it is not
+synced) and is sent only to Google, in the `X-Goog-Api-Key` request header,
+never in a URL. Turn the switch off to stop all requests; clear the field to
+remove the key.
+
+#### If it doesn't seem to work
+
+- Pages you have read before keep their cached meanings; try a new page.
+- Any Google error leaves the page glossed as it would be without Google. The
+  Web Inspector console of the extension's background page shows a line such
+  as `[Lithuanify] Google Translate: HTTP 403`: 400 or 403 usually means a
+  wrong key, a key restricted to another API, the API not enabled, or no
+  billing account; 429 means a quota limit.
 
 > Note: Apple's *Translation* framework can't be used here: it has no Lithuanian
 > (`LanguageAvailability` reports lt → en as unsupported). FoundationModels
@@ -59,7 +121,8 @@ in a request header. A Google error leaves the page glossed as without it.
     that don't look Lithuanian. On iPhone and iPad, where there is no hover,
     this is the mode to use.
 - Context-aware meanings via the on-device language model, optionally helped
-  by a Google Translate sentence translation.
+  by a Google Translate sentence translation (opt-in, with your own API key;
+  see [Optional: Google Translate as context](#optional-google-translate-as-context)).
 - **Word cards:** tap a gloss for its lemma, every meaning, where the meaning
   came from and a Wiktionary link. **Save** a word, or mark it **known** to
   hide its glosses everywhere. The **Saved words** page (from the popup)
@@ -71,8 +134,9 @@ in a request header. A Google error leaves the page glossed as without it.
   session is reused per request; a persistent IndexedDB gloss cache makes
   revisits instant. Timings are logged to the Web Inspector console.
 - Diacritic-insensitive dictionary matching.
-- Toolbar popup to toggle the extension and the on-device AI on/off, pick the
-  translate mode, and see whether the on-device model is available.
+- Toolbar popup to toggle the extension, the on-device AI and Google Translate,
+  pick the translate mode, hide common words, see whether the on-device model
+  is available, and open Saved words.
 
 ## Project layout
 
@@ -136,6 +200,9 @@ The script downloads its sources into `build/dictionary` (about 620 MB, mostly t
 - Xcode 26 or later. The app and the extension need **iOS 26** or **macOS 26**.
 - For the on-device AI path: a device with **Apple Intelligence** enabled.
   Without it, Lithuanify uses the offline dictionary only.
+- For the optional Google Translate context: the on-device AI above, plus your
+  own Google Cloud **Cloud Translation API key** with billing enabled (see
+  [Set up a key](#set-up-a-key)).
 
 ## License
 
