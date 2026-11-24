@@ -210,3 +210,65 @@ test('hiding common words leaves a common word bare and does not send it to the 
   assert.deepEqual(page.glosses(), [['knygą', 'book']])
   assert.equal(page.glossCalls(), 0)
 })
+
+test('turning Lithuanify off in the popup gives back the original text in every open tab', async () => {
+  const page = await loadContent(lt('<p id="p">Aš skaitau knygą.</p>'))
+  await page.settle()
+  assert.ok(page.glosses().length > 0)
+
+  page.changeSettings({ enabled: false })
+  await waitFor(() => page.glosses().length === 0)
+  assert.equal(page.document.querySelector('#p').innerHTML, 'Aš skaitau knygą.')
+
+  page.changeSettings({ enabled: true })
+  await waitFor(() => page.glosses().length > 0)
+  await page.settle()
+})
+
+test('a new translate mode from the popup reaches a tab that is already open', async () => {
+  const page = await loadContent(lt('<p id="p">Aš skaitau knygą.</p>'))
+  await page.settle()
+  assert.ok(page.glosses().length > 0)
+
+  page.changeSettings({ mode: 'select' })
+  await waitFor(() => page.glosses().length === 0)
+  await page.settle()
+  assert.equal(page.state('mode'), 'select')
+})
+
+test('a page whose Lithuanian text arrives after load still gets glosses', async () => {
+  const page = await loadContent('<!doctype html><html><body><div id="app">Loading…</div></body></html>')
+  await page.settle()
+  assert.equal(page.glosses().length, 0)
+
+  page.document.querySelector('#app').innerHTML =
+    '<p>Aš skaitau knygą apie Lietuvos istoriją ir labai ją mėgstu.</p>'
+  await waitFor(() => page.glosses().some(([word]) => word === 'knygą'))
+  await page.settle()
+})
+
+test('a page with plenty of English text is left alone even when more text arrives', async () => {
+  const english = 'This is a long English article about books and history. '.repeat(10)
+  const page = await loadContent(`<!doctype html><html><body><p>${english}</p></body></html>`)
+  await page.settle()
+  page.document.body.insertAdjacentHTML('beforeend', '<p>Aš skaitau knygą ir labai ją mėgstu.</p>')
+  await new Promise((resolve) => setTimeout(resolve, 800))
+  assert.equal(page.glosses().length, 0)
+})
+
+test('an approximate meaning shows at once and goes to the model with its lemma to confirm or replace', async () => {
+  let answer
+  const reply = new Promise((resolve) => { answer = resolve })
+  const page = await loadContent(lt('<p>Jis išvažiuoja.</p>'), {
+    dictionary: { išvažiuoja: { m: ['go by vehicle'], l: 'išvažiuoti', approx: true } }, gloss: () => reply
+  })
+  await waitFor(() => page.glossCalls() === 1)
+  assert.deepEqual(page.glosses(), [['išvažiuoja', 'go by vehicle']])
+  assert.deepEqual(page.sent[0], [{
+    text: 'Jis išvažiuoja.', words: ['jis', 'išvažiuoja'],
+    hints: [null, { lemma: 'išvažiuoti', options: ['go by vehicle'] }]
+  }])
+  answer([{ jis: 'he', išvažiuoja: 'leaves' }])
+  await page.settle()
+  assert.deepEqual(page.glosses(), [['Jis', 'he'], ['išvažiuoja', 'leaves']])
+})

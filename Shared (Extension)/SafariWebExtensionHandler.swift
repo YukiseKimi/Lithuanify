@@ -16,34 +16,27 @@ private let logger = Logger(subsystem: "mannychau.Lithuanify.Extension", categor
 class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
 
     func beginRequest(with context: NSExtensionContext) {
-        let request = context.inputItems.first as? NSExtensionItem
-        let message = request?.userInfo?[SFExtensionMessageKey]
+        let request = PendingRequest(context: context)
+        let item = context.inputItems.first as? NSExtensionItem
+        let message = item?.userInfo?[SFExtensionMessageKey]
 
         guard let dict = message as? [String: Any],
               let command = dict["command"] as? String else {
-            complete(context, with: ["error": "invalid message"])
+            request.complete(with: ["error": "invalid message"])
             return
         }
 
         switch command {
         case "modelStatus":
             Self.prewarm()
-            complete(context, with: ["available": AIStatus.current == .ready])
+            request.complete(with: ["available": AIStatus.current == .ready])
 
         case "gloss":
-            handleGloss(blocks: GlossBlock.list(from: dict["blocks"]), context: context)
+            Self.gloss(GlossBlock.list(from: dict["blocks"]), for: request)
 
         default:
-            complete(context, with: ["error": "unknown command: \(command)"])
+            request.complete(with: ["error": "unknown command: \(command)"])
         }
-    }
-
-    // MARK: - Response helper
-
-    private func complete(_ context: NSExtensionContext, with payload: [String: Any]) {
-        let response = NSExtensionItem()
-        response.userInfo = [SFExtensionMessageKey: payload]
-        context.completeRequest(returningItems: [ response ], completionHandler: nil)
     }
 
     // MARK: - On-device model
@@ -53,17 +46,33 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         SessionPool.shared.fillIfEmpty()
     }
 
-    private func handleGloss(blocks: [GlossBlock], context: NSExtensionContext) {
+    private static func gloss(_ blocks: [GlossBlock], for request: PendingRequest) {
         guard AIStatus.current == .ready else {
-            complete(context, with: ["available": false, "results": []])
+            request.complete(with: ["available": false, "results": []])
             return
         }
         Task {
-            let answer = await Glosser.gloss(blocks)
-            self.complete(context, with: [
-                "available": true, "results": answer.results, "ok": answer.ok, "rateLimited": answer.rateLimited,
+            let run = await Glosser.gloss(blocks, first: SessionPool.shared.take(), fresh: SessionPool.makeSession)
+            if !run.rateLimited { SessionPool.shared.fillIfEmpty() }
+            request.complete(with: [
+                "available": true, "results": run.results, "ok": run.ok, "rateLimited": run.rateLimited,
             ])
         }
+    }
+}
+
+/// One request from Safari, answered once. Safari hands the handler a context
+/// per request and waits for a single completeRequest call, which may come
+/// from any thread; nothing else uses the context after beginRequest returns.
+/// So the context can move to the task that answers it, though
+/// NSExtensionContext is not marked Sendable.
+private struct PendingRequest: @unchecked Sendable {
+    let context: NSExtensionContext
+
+    func complete(with payload: [String: Any]) {
+        let response = NSExtensionItem()
+        response.userInfo = [SFExtensionMessageKey: payload]
+        context.completeRequest(returningItems: [response], completionHandler: nil)
     }
 }
 
@@ -74,77 +83,38 @@ final class SessionPool: Sendable {
 
     private let warm = Mutex<LanguageModelSession?>(nil)
 
-    static func makeSession() -> LanguageModelSession {
+    static func makeSession() -> ModelSession {
+        ModelSession(session: newModelSession())
+    }
+
+    private static func newModelSession() -> LanguageModelSession {
         LanguageModelSession(
             model: SystemLanguageModel(guardrails: .permissiveContentTransformations),
             instructions: GlossCore.instructions
         )
     }
 
-    func take() -> LanguageModelSession {
-        warm.withLock { $0.take() } ?? Self.makeSession()
+    func take() -> ModelSession {
+        ModelSession(session: warm.withLock { $0.take() } ?? Self.newModelSession())
     }
 
     func fillIfEmpty() {
         guard AIStatus.current == .ready else { return }
         warm.withLock { warm in
             guard warm == nil else { return }
-            let session = Self.makeSession()
+            let session = Self.newModelSession()
             session.prewarm()
             warm = session
         }
     }
 }
 
-enum Glosser {
+/// Apple's on-device model as a GlossSession: one turn per job, errors sorted
+/// into the outcomes Glosser acts on.
+struct ModelSession: GlossSession {
+    let session: LanguageModelSession
 
-    static let maxTurnsPerSession = 4
-
-    enum Outcome {
-        case answered([WordAnswer])
-        case failed
-        case rateLimited
-    }
-
-    static func gloss(_ blocks: [GlossBlock]) async -> (results: [[String]], ok: [Bool], rateLimited: Bool) {
-        var results = blocks.map { Array(repeating: "", count: $0.words.count) }
-        var ok = Array(repeating: true, count: blocks.count)
-        let jobs = GlossCore.makeJobs(blocks)
-        guard !jobs.isEmpty else { return (results, ok, false) }
-
-        var session = SessionPool.shared.take()
-        var turns = 0
-
-        for (n, job) in jobs.enumerated() {
-            if turns >= maxTurnsPerSession {
-                session = SessionPool.makeSession()
-                turns = 0
-            }
-            var outcome = await run(job, on: session)
-            turns += 1
-            if case .failed = outcome, turns > 1 {
-                session = SessionPool.makeSession()
-                outcome = await run(job, on: session)
-                turns = 1
-            }
-            switch outcome {
-            case .answered(let items):
-                GlossCore.apply(items, of: job, to: &results)
-            case .failed:
-                for target in job.targets { ok[target.block] = false }
-            case .rateLimited:
-                for rest in jobs[n...] {
-                    for target in rest.targets { ok[target.block] = false }
-                }
-                return (results, ok, true)
-            }
-        }
-
-        SessionPool.shared.fillIfEmpty()
-        return (results, ok, false)
-    }
-
-    private static func run(_ job: GlossCore.Job, on session: LanguageModelSession) async -> Outcome {
+    func answer(_ job: GlossCore.Job) async -> GlossOutcome {
         do {
             let response = try await session.respond(
                 to: GlossCore.prompt(for: job),
@@ -156,6 +126,9 @@ enum Glosser {
         } catch LanguageModelSession.GenerationError.rateLimited {
             logger.notice("Gloss rate limited")
             return .rateLimited
+        } catch LanguageModelSession.GenerationError.guardrailViolation, LanguageModelSession.GenerationError.refusal {
+            logger.notice("Gloss refused by the model's guardrails")
+            return .refused
         } catch {
             logger.error("Gloss failed: \(String(describing: error), privacy: .private)")
             return .failed

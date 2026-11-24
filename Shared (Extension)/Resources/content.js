@@ -53,7 +53,7 @@ const RENDER_BATCH = 25;
 const REFINE_MAX_BLOCKS = 12;  // text blocks per on-device model request
 const REFINE_MAX_WORDS = 40;   // unknown words per on-device model request
 
-let enabled = true;          // master on/off
+let enabled = false;         // running on this page
 let smartEnabled = true;     // use on-device AI for words the dictionary doesn't know
 let mode = "page";
 let hideCommon = 0;          // hide the glosses of words ranked this common or more
@@ -87,9 +87,11 @@ function dictLookup(word) {
     return entry ? entry.m[0] : null;
 }
 
+// The model picks among several meanings, and confirms or replaces an
+// approximate one (the plain verb's meaning for a prefixed verb).
 function needsPick(word) {
     const entry = entryFor(word);
-    return !!entry && entry.m.length > 1 && aiActive();
+    return !!entry && (entry.m.length > 1 || !!entry.approx) && aiActive();
 }
 
 const MAX_PHRASE_WORDS = 3;
@@ -632,13 +634,19 @@ const COMMON_WORDS = new Set([
     "tik", "dar", "nuo", "per", "apie", "kur", "labai", "taip", "jau", "mes", "jie", "arba", "bei"
 ]);
 
-function detectLithuanian() {
+// Below this many words a page that doesn't look Lithuanian may still be
+// loading its text, so the answer is "unsure" rather than "other".
+const DETECT_MIN_WORDS = 40;
+const REDETECT_DELAY_MS = 500;
+
+// "lt", "other", or "unsure" (too little text yet to tell).
+function detectLanguage() {
     const lang = (document.documentElement.getAttribute("lang") || "").toLowerCase();
-    if (lang.startsWith("lt")) return true;
+    if (lang.startsWith("lt")) return "lt";
 
     const sample = ((document.body && document.body.innerText) || "").slice(0, 4000).toLowerCase();
     const words = sample.match(/[\p{L}]+/gu) || [];
-    if (words.length < 5) return false;
+    if (words.length < 5) return "unsure";
 
     let hits = 0;
     for (const w of words) {
@@ -646,7 +654,43 @@ function detectLithuanian() {
             hits++;
         }
     }
-    return hits / words.length > 0.15;
+    if (hits / words.length > 0.15) return "lt";
+    return words.length < DETECT_MIN_WORDS ? "unsure" : "other";
+}
+
+// While the language is unsure, look again each time the page settles after
+// a change, until it is decided either way.
+let languageWatcher = null;
+let redetectTimer = null;
+
+function watchLanguage() {
+    if (languageWatcher || !document.documentElement) return;
+    languageWatcher = new MutationObserver(() => {
+        clearTimeout(redetectTimer);
+        redetectTimer = setTimeout(redetect, REDETECT_DELAY_MS);
+    });
+    languageWatcher.observe(document.documentElement, {
+        childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["lang"]
+    });
+}
+
+function stopWatchingLanguage() {
+    clearTimeout(redetectTimer);
+    redetectTimer = null;
+    if (languageWatcher) {
+        languageWatcher.disconnect();
+        languageWatcher = null;
+    }
+}
+
+function redetect() {
+    const verdict = detectLanguage();
+    if (verdict === "unsure") return;
+    stopWatchingLanguage();
+    if (verdict === "lt" && enabled && !pageIsLithuanian) {
+        pageIsLithuanian = true;
+        start();
+    }
 }
 
 const HOVER_DELAY_MS = 300;
@@ -818,9 +862,17 @@ async function enable() {
     enabled = true;
     t0 = performance.now();
     timingLogged.clear();
-    pageIsLithuanian = detectLithuanian();
-    if (!pageIsLithuanian && mode !== "select") return;
+    const verdict = detectLanguage();
+    pageIsLithuanian = verdict === "lt";
+    // Selected text is glossed on any page; the other modes wait for Lithuanian.
+    if (!pageIsLithuanian && mode !== "select") {
+        if (verdict === "unsure") watchLanguage();
+        return;
+    }
+    await start();
+}
 
+async function start() {
     injectStyles();
     const gen = generation;
     if (smartEnabled) {
@@ -845,6 +897,7 @@ function disable() {
     generation++;
     rendering = false;
     refining = false;
+    stopWatchingLanguage();
     stopObserver();
     stopOnDemand();
     if (viewportObserver) {
@@ -864,60 +917,47 @@ function disable() {
     removeAnnotations();
 }
 
-async function init() {
-    try {
-        const result = await browser.storage.local.get(["enabled", "smart", "mode", "hideCommon"]);
-        enabled = result.enabled !== false;
-        smartEnabled = result.smart !== false;
-        hideCommon = Number(result.hideCommon) || 0;
-        if (["page", "hover", "select"].includes(result.mode)) mode = result.mode;
-    } catch (e) {
-        enabled = true;
-        smartEnabled = true;
-    }
-    if (enabled) await enable();
+// --- Settings ---------------------------------------------------------------
+// The popup writes the settings to storage.local; every open tab follows them.
+
+const SETTING_KEYS = ["enabled", "smart", "mode", "hideCommon"];
+const MODES = ["page", "hover", "select"];
+
+function settingsFrom(stored) {
+    return {
+        enabled: stored.enabled !== false,
+        smart: stored.smart !== false,
+        mode: MODES.includes(stored.mode) ? stored.mode : "page",
+        hideCommon: Number(stored.hideCommon) || 0
+    };
 }
 
-// Popup commands.
-browser.runtime.onMessage.addListener((request) => {
-    if (!request) return;
-    if (request.command === "toggle") {
-        if (request.enabled) {
-            if (!enabled) enable();
-        } else {
-            disable();
-        }
-        return Promise.resolve({ enabled });
+async function readSettings() {
+    try {
+        return settingsFrom(await browser.storage.local.get(SETTING_KEYS));
+    } catch (e) {
+        return settingsFrom({});
     }
-    if (request.command === "setSmart") {
-        smartEnabled = request.enabled;
-        // Re-scan from scratch so the new setting is applied.
-        if (enabled) {
-            disable();
-            enable();
-        }
-        return Promise.resolve({ smart: smartEnabled });
-    }
-    if (request.command === "setMode") {
-        if (["page", "hover", "select"].includes(request.mode)) mode = request.mode;
-        if (enabled) {
-            disable();
-            enable();
-        }
-        return Promise.resolve({ mode });
-    }
-    if (request.command === "setHideCommon") {
-        hideCommon = Number(request.hideCommon) || 0;
-        if (enabled) {
-            disable();
-            enable();
-        }
-        return Promise.resolve({ hideCommon });
-    }
-    if (request.command === "status") {
-        return Promise.resolve({ enabled, smart: smartEnabled, mode, modelAvailable });
-    }
+}
+
+async function applySettings(next) {
+    const changed = next.smart !== smartEnabled || next.mode !== mode || next.hideCommon !== hideCommon;
+    smartEnabled = next.smart;
+    mode = next.mode;
+    hideCommon = next.hideCommon;
+    // A changed setting re-scans from scratch so it applies to the whole page.
+    if (enabled && (!next.enabled || changed)) disable();
+    if (next.enabled && !enabled) await enable();
+}
+
+browser.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !SETTING_KEYS.some((key) => key in changes)) return;
+    readSettings().then(applySettings);
 });
+
+async function init() {
+    await applySettings(await readSettings());
+}
 
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

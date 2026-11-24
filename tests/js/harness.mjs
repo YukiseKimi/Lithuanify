@@ -33,6 +33,10 @@ export async function loadContent(html, { hideCommon = 0, mode = 'page', modelAv
   const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true })
   const { window } = dom
   open.add(window)
+  // jsdom has no layout, so no innerText; the text is close enough for language checks.
+  if (!('innerText' in window.HTMLElement.prototype)) {
+    Object.defineProperty(window.HTMLElement.prototype, 'innerText', { get() { return this.textContent } })
+  }
   const sent = []
   const lookups = []
   let glossCalls = 0
@@ -61,8 +65,13 @@ export async function loadContent(html, { hideCommon = 0, mode = 'page', modelAv
     unobserve(el) { this.targets.delete(el) }
     disconnect() { this.targets.clear(); observers.delete(this) }
   }
+  const stored = { mode, hideCommon }
+  const storageListeners = []
   window.browser = {
-    storage: { local: { get: async () => ({ mode, hideCommon }), set: async () => {} } },
+    storage: {
+      local: { get: async () => ({ ...stored }), set: async () => {} },
+      onChanged: { addListener: (listener) => storageListeners.push(listener) }
+    },
     runtime: {
       onMessage: { addListener() {} },
       sendMessage: async (message) => {
@@ -71,7 +80,12 @@ export async function loadContent(html, { hideCommon = 0, mode = 'page', modelAv
           lookups.push(plain(message.words))
           if (lookups.length <= lookupFailures) throw new Error('background gone')
           return Object.fromEntries(message.words.filter((w) => w in dictionary)
-            .map((w) => [w, { m: [].concat(dictionary[w].m || dictionary[w]), l: null, r: dictionary[w].r || 0 }]))
+            .map((w) => [w, {
+              m: [].concat(dictionary[w].m || dictionary[w]),
+              l: dictionary[w].l || null,
+              r: dictionary[w].r || 0,
+              ...(dictionary[w].approx ? { approx: true } : {})
+            }]))
         }
         if (message.command === 'gloss') {
           glossCalls += 1
@@ -94,6 +108,15 @@ export async function loadContent(html, { hideCommon = 0, mode = 'page', modelAv
     sent,
     lookups,
     glossCalls: () => glossCalls,
+    // What the popup does: write settings to storage.local, which every tab hears.
+    changeSettings: (values) => {
+      const changes = {}
+      for (const [key, newValue] of Object.entries(values)) {
+        changes[key] = { oldValue: stored[key], newValue }
+        stored[key] = newValue
+      }
+      storageListeners.forEach((listener) => listener(changes, 'local'))
+    },
     scrollTo: (selector) => {
       const el = window.document.querySelector(selector)
       for (const observer of observers) {

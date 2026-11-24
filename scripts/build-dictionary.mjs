@@ -24,7 +24,10 @@ const isHeadword = (text) => {
 }
 
 const STRESS_MARKS = /[\u0300\u0301\u0303]/g
-const withoutStress = (text) => text.normalize('NFD').replace(STRESS_MARKS, '').normalize('NFC')
+// Wiktionary writes a stressed i (or \u012f) with a dot above it as well, as in
+// "di\u0307\u0300rba". That dot (U+0307) goes; the same mark is part of \u0117, which stays.
+const DOT_OVER_I = /([ij]\u0328?)\u0307/g
+const withoutStress = (text) => text.normalize('NFD').replace(DOT_OVER_I, '$1').replace(STRESS_MARKS, '').normalize('NFC')
 
 export function shortGloss(text) {
   const first = text

@@ -40,34 +40,20 @@ browser.runtime.sendMessage({ command: "modelStatus" }).then((res) => {
     }
 }).catch(() => { /* leave blank */ });
 
-async function sendToActiveTab(message) {
-    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-    if (tabs[0]) {
-        browser.tabs.sendMessage(tabs[0].id, message)
-            .catch(() => { /* no content script on this page */ });
-    }
-}
-
-toggle.addEventListener("change", async () => {
-    const enabled = toggle.checked;
-    renderEnabled(enabled);
-    await browser.storage.local.set({ enabled });
-    await sendToActiveTab({ command: "toggle", enabled });
+// Settings go to storage.local only; every open tab listens for the change.
+toggle.addEventListener("change", () => {
+    renderEnabled(toggle.checked);
+    browser.storage.local.set({ enabled: toggle.checked });
 });
 
-mode.addEventListener("change", async () => {
-    await browser.storage.local.set({ mode: mode.value });
-    await sendToActiveTab({ command: "setMode", mode: mode.value });
+mode.addEventListener("change", () => {
+    browser.storage.local.set({ mode: mode.value });
 });
 
-hideCommon.addEventListener("change", async () => {
-    const value = Number(hideCommon.value) || 0;
-    await browser.storage.local.set({ hideCommon: value });
-    await sendToActiveTab({ command: "setHideCommon", hideCommon: value });
+hideCommon.addEventListener("change", () => {
+    browser.storage.local.set({ hideCommon: Number(hideCommon.value) || 0 });
 });
 
-smart.addEventListener("change", async () => {
-    const enabled = smart.checked;
-    await browser.storage.local.set({ smart: enabled });
-    await sendToActiveTab({ command: "setSmart", enabled });
+smart.addEventListener("change", () => {
+    browser.storage.local.set({ smart: smart.checked });
 });
