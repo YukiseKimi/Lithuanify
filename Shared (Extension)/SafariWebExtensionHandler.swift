@@ -16,34 +16,27 @@ private let logger = Logger(subsystem: "mannychau.Lithuanify.Extension", categor
 class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
 
     func beginRequest(with context: NSExtensionContext) {
-        let request = context.inputItems.first as? NSExtensionItem
-        let message = request?.userInfo?[SFExtensionMessageKey]
+        let request = PendingRequest(context: context)
+        let item = context.inputItems.first as? NSExtensionItem
+        let message = item?.userInfo?[SFExtensionMessageKey]
 
         guard let dict = message as? [String: Any],
               let command = dict["command"] as? String else {
-            complete(context, with: ["error": "invalid message"])
+            request.complete(with: ["error": "invalid message"])
             return
         }
 
         switch command {
         case "modelStatus":
             Self.prewarm()
-            complete(context, with: ["available": AIStatus.current == .ready])
+            request.complete(with: ["available": AIStatus.current == .ready])
 
         case "gloss":
-            handleGloss(blocks: GlossBlock.list(from: dict["blocks"]), context: context)
+            Self.gloss(GlossBlock.list(from: dict["blocks"]), for: request)
 
         default:
-            complete(context, with: ["error": "unknown command: \(command)"])
+            request.complete(with: ["error": "unknown command: \(command)"])
         }
-    }
-
-    // MARK: - Response helper
-
-    private func complete(_ context: NSExtensionContext, with payload: [String: Any]) {
-        let response = NSExtensionItem()
-        response.userInfo = [SFExtensionMessageKey: payload]
-        context.completeRequest(returningItems: [ response ], completionHandler: nil)
     }
 
     // MARK: - On-device model
@@ -53,18 +46,33 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         SessionPool.shared.fillIfEmpty()
     }
 
-    private func handleGloss(blocks: [GlossBlock], context: NSExtensionContext) {
+    private static func gloss(_ blocks: [GlossBlock], for request: PendingRequest) {
         guard AIStatus.current == .ready else {
-            complete(context, with: ["available": false, "results": []])
+            request.complete(with: ["available": false, "results": []])
             return
         }
         Task {
             let run = await Glosser.gloss(blocks, first: SessionPool.shared.take(), fresh: SessionPool.makeSession)
             if !run.rateLimited { SessionPool.shared.fillIfEmpty() }
-            self.complete(context, with: [
+            request.complete(with: [
                 "available": true, "results": run.results, "ok": run.ok, "rateLimited": run.rateLimited,
             ])
         }
+    }
+}
+
+/// One request from Safari, answered once. Safari hands the handler a context
+/// per request and waits for a single completeRequest call, which may come
+/// from any thread; nothing else uses the context after beginRequest returns.
+/// So the context can move to the task that answers it, though
+/// NSExtensionContext is not marked Sendable.
+private struct PendingRequest: @unchecked Sendable {
+    let context: NSExtensionContext
+
+    func complete(with payload: [String: Any]) {
+        let response = NSExtensionItem()
+        response.userInfo = [SFExtensionMessageKey: payload]
+        context.completeRequest(returningItems: [response], completionHandler: nil)
     }
 }
 
