@@ -29,7 +29,7 @@ export async function waitFor(check, { timeout = 3000, every = 10 } = {}) {
 
 const sampleDictionary = { aš: 'I', knygą: 'book', knygoje: 'book' }
 
-export async function loadContent(html, { hideCommon = 0, mode = 'page', modelAvailable = true, gloss = glossAll, dictionary = sampleDictionary, lookupFailures = 0, reply = null, offscreen = null } = {}) {
+export async function loadContent(html, { hideCommon = 0, mode = 'page', modelAvailable = true, gloss = glossAll, dictionary = sampleDictionary, lookupFailures = 0, reply = null, offscreen = null, stored: initial = {} } = {}) {
   const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true })
   const { window } = dom
   open.add(window)
@@ -65,7 +65,7 @@ export async function loadContent(html, { hideCommon = 0, mode = 'page', modelAv
     unobserve(el) { this.targets.delete(el) }
     disconnect() { this.targets.clear(); observers.delete(this) }
   }
-  const stored = { mode, hideCommon }
+  const stored = { mode, hideCommon, ...initial }
   const storageListeners = []
   // storage.local as Safari gives it: keyed reads, and a change event in every tab.
   const notify = (changes) => storageListeners.forEach((listener) => listener(plain(changes), 'local'))
@@ -171,6 +171,12 @@ export async function loadContent(html, { hideCommon = 0, mode = 'page', modelAv
     // Presses Save on the open card, and waits for storage to answer.
     pressSave: async () => {
       const button = window.document.getElementById('lithuanify-card').shadowRoot.querySelector('button.save')
+      button.dispatchEvent(new window.MouseEvent('click', { bubbles: true, composed: true }))
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    },
+    // Presses "Know it" on the open card.
+    pressKnow: async () => {
+      const button = window.document.getElementById('lithuanify-card').shadowRoot.querySelector('button.know')
       button.dispatchEvent(new window.MouseEvent('click', { bubbles: true, composed: true }))
       await new Promise((resolve) => setTimeout(resolve, 10))
     },

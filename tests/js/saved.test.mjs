@@ -144,3 +144,21 @@ test('on a touch screen, Export CSV hands the file to the share sheet', async ()
   assert.equal(file.via, 'share')
   assert.equal(file.name, 'lithuanify-saved-words.csv')
 })
+
+test('the page lists known words, and × forgets one', async () => {
+  const stored = {
+    'known:knyga': { word: 'knygą', lemma: 'knyga', knownAt: 1 },
+    'known:aš': { word: 'aš', lemma: null, knownAt: 2 },
+    'saved:šalis': word('šalis', 'country', 'a', 100)
+  }
+  const page = await loadSaved(stored)
+  const known = () => [...page.document.querySelectorAll('#known-list li .lemma')].map((el) => el.textContent)
+  assert.deepEqual(known(), ['aš', 'knyga'])
+  assert.equal(page.document.getElementById('known-count').textContent, '2')
+  assert.deepEqual(page.rows().map((r) => r.lemma), ['šalis'])
+
+  page.document.querySelector('#known-list li:last-child button.remove').click()
+  await page.settle()
+  assert.equal('known:knyga' in stored, false)
+  assert.deepEqual(known(), ['aš'])
+})

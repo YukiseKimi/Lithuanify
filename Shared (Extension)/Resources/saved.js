@@ -2,11 +2,15 @@
 // Each saved word is one storage.local key, "saved:<lemma>" (see content.js).
 
 const SAVED_PREFIX = "saved:";
+const KNOWN_PREFIX = "known:";  // words whose glosses the reader hid (see content.js)
 
 const list = document.getElementById("list");
 const count = document.getElementById("count");
 const empty = document.getElementById("empty");
 const find = document.getElementById("find");
+const knownSection = document.getElementById("known");
+const knownList = document.getElementById("known-list");
+const knownCount = document.getElementById("known-count");
 
 // Lowercase, without diacritics, as the dictionary matches: "sali" finds šalis.
 const fold = (text) => String(text).toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
@@ -17,13 +21,14 @@ function matches(saved, query) {
 }
 
 let words = [];  // [{ key, word, lemma, meanings, shown, sentence, savedAt }], newest first
+let known = [];  // [{ key, word, lemma, knownAt }], newest first
 
-async function readSaved() {
-    const stored = await browser.storage.local.get(null);
+// The records under one key prefix, newest first by `field`.
+function recordsOf(stored, prefix, field) {
     return Object.entries(stored)
-        .filter(([key, value]) => key.startsWith(SAVED_PREFIX) && value)
+        .filter(([key, value]) => key.startsWith(prefix) && value)
         .map(([key, value]) => ({ key, ...value }))
-        .sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+        .sort((a, b) => (b[field] || 0) - (a[field] || 0));
 }
 
 function element(tag, className, text) {
@@ -46,10 +51,24 @@ function row(saved) {
     return li;
 }
 
+function knownRow(word) {
+    const li = element("li");
+    li.append(element("span", "lemma", word.lemma || word.word));
+    const remove = element("button", "remove", "×");
+    remove.type = "button";
+    remove.setAttribute("aria-label", `Show glosses of ${word.lemma || word.word} again`);
+    remove.addEventListener("click", () => browser.storage.local.remove(word.key));
+    li.append(remove);
+    return li;
+}
+
 function render() {
     list.replaceChildren(...words.filter((saved) => matches(saved, find.value)).map(row));
     count.textContent = String(words.length);
     empty.hidden = words.length > 0;
+    knownList.replaceChildren(...known.map(knownRow));
+    knownCount.textContent = String(known.length);
+    knownSection.hidden = known.length === 0;
 }
 
 find.addEventListener("input", render);
@@ -104,13 +123,15 @@ exportButton.addEventListener("click", async () => {
 });
 
 async function refresh() {
-    words = await readSaved();
+    const stored = await browser.storage.local.get(null);
+    words = recordsOf(stored, SAVED_PREFIX, "savedAt");
+    known = recordsOf(stored, KNOWN_PREFIX, "knownAt");
     render();
 }
 
 // A save or a removal on a page, in any tab, shows here at once.
 browser.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && Object.keys(changes).some((key) => key.startsWith(SAVED_PREFIX))) refresh();
+    if (area === "local" && Object.keys(changes).some((key) => key.startsWith(SAVED_PREFIX) || key.startsWith(KNOWN_PREFIX))) refresh();
 });
 
 refresh();
