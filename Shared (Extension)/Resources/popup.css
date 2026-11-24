@@ -146,3 +146,12 @@ h1 {
         background: #48484a;
     }
 }
+
+.saved {
+    margin: 10px 0 0;
+    font-weight: 600;
+}
+
+.saved a {
+    color: inherit;
+}
