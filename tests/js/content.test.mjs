@@ -370,3 +370,14 @@ test('Escape, a tap outside the card, a scroll and turning Lithuanify off each c
   page.changeSettings({ enabled: false })
   await waitFor(() => page.card() === null)
 })
+
+test('the card links the lemma, or else the word, to the Lithuanian entry on Wiktionary', async () => {
+  const page = await loadContent(lt('<p>Lietuvos šalies žmonės.</p>'), {
+    dictionary: { šalies: { m: ['land', 'country'], l: 'šalis' } }
+  })
+  await page.settle()
+  page.tapGloss('šalies')
+  assert.equal(page.card().link, 'https://en.wiktionary.org/wiki/%C5%A1alis#Lithuanian')
+  page.tapGloss('žmonės')
+  assert.equal(page.card().link, 'https://en.wiktionary.org/wiki/%C5%BEmon%C4%97s#Lithuanian')
+})

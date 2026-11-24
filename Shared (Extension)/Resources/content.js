@@ -729,6 +729,13 @@ function sourceLine(info, shown) {
     return "Dictionary";
 }
 
+// The Lithuanian section of the English Wiktionary: the lemma's page, or the
+// word's own when there is no lemma (a meaning from the on-device model).
+function wiktionaryUrl(info) {
+    const word = (info.entry && info.entry.l) || info.lower;
+    return `https://en.wiktionary.org/wiki/${encodeURIComponent(word)}#Lithuanian`;
+}
+
 function openCard(ruby, info) {
     const shown = ruby.lastChild.textContent;
     const entry = info.entry;
@@ -746,7 +753,11 @@ function openCard(ruby, info) {
     for (const meaning of meanings) list.append(element("li", meaning === shown ? "shown" : "", meaning));
 
     const foot = element("div", "foot");
-    foot.append(element("span", "source", sourceLine(info, shown)));
+    const wiki = element("a", "wiki", "Wiktionary ↗");
+    wiki.href = wiktionaryUrl(info);
+    wiki.target = "_blank";
+    wiki.rel = "noopener noreferrer";
+    foot.append(element("span", "source", sourceLine(info, shown)), wiki);
 
     card.replaceChildren(head, list, foot);
     cardHost.hidden = false;
