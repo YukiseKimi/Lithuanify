@@ -216,23 +216,30 @@ export async function loadContent(html, { hideCommon = 0, mode = 'page', modelAv
   return page
 }
 
-export function loadBackground({ native = () => ({ available: true, results: [] }), idb = indexedDB, dictionary = null, fetchFailures = 0 } = {}) {
+export function loadBackground({ native = () => ({ available: true, results: [] }), idb = indexedDB, dictionary = null, fetchFailures = 0, settings = {}, google = null } = {}) {
   const nativeCalls = []
   const fetches = []
+  const googleCalls = []
   const context = vm.createContext({
     indexedDB: idb,
     IDBKeyRange,
     console,
     setTimeout,
     clearTimeout,
-    fetch: async (url) => {
+    fetch: async (url, init = {}) => {
+      if (String(url).startsWith('https://translation.googleapis.com/')) {
+        const body = JSON.parse(init.body)
+        googleCalls.push({ url: String(url), key: init.headers['X-Goog-Api-Key'], body })
+        const reply = google ? google(body) : { status: 500, json: {} }
+        return { ok: reply.status === 200, status: reply.status, json: async () => reply.json }
+      }
       fetches.push(url)
       if (fetches.length <= fetchFailures) throw new Error('not readable yet')
       if (dictionary === null) return { ok: false, status: 404, text: async () => '' }
       return { ok: true, status: 200, text: async () => dictionary }
     },
     browser: {
-      storage: { local: { remove: async () => {} } },
+      storage: { local: { remove: async () => {}, get: async () => plain(settings) } },
       runtime: {
         getURL: (path) => 'safari-web-extension://lithuanify/' + path,
         onMessage: { addListener() {} },
@@ -252,6 +259,7 @@ export function loadBackground({ native = () => ({ available: true, results: [] 
     gloss: async (blocks) => plain(await context.handleGloss(blocks)),
     lookup: async (words) => plain(await context.handleLookup(words)),
     fetches,
+    googleCalls,
     nativeCalls,
     close,
     state: (expression) => vm.runInContext(expression, context)

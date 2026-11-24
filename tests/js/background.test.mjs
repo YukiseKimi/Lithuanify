@@ -300,3 +300,39 @@ test('a lookup gives the frequency rank of a word', async () => {
   const found = await bg.lookup(['ir', 'knygą', 'gaisro'])
   assert.deepEqual([found.ir.r, found.knygą.r, found.gaisro.r], [1, 40, 0])
 })
+
+const translate = (body) => ({ status: 200, json: { data: { translations: body.q.map((text) => ({ translatedText: 'EN: ' + text })) } } })
+
+test('with Google Translate on, each block goes to the model with its English translation', async () => {
+  const bg = load({
+    settings: { google: true, googleKey: 'test-key' }, google: translate,
+    native: (message) => ({ available: true, results: message.blocks.map((b) => b.words.map(() => 'm')) })
+  })
+  await bg.gloss([{ text: 'Aš skaitau.', words: ['skaitau'] }, { text: 'Tu rašai.', words: ['rašai'] }])
+  assert.deepEqual(bg.googleCalls, [{
+    url: 'https://translation.googleapis.com/language/translate/v2', key: 'test-key',
+    body: { q: ['Aš skaitau.', 'Tu rašai.'], source: 'lt', target: 'en', format: 'text' }
+  }])
+  assert.deepEqual(bg.nativeCalls[0].blocks.map((b) => b.translation), ['EN: Aš skaitau.', 'EN: Tu rašai.'])
+  await bg.close()
+})
+
+test('with Google Translate off, or with no key, nothing goes to Google', async () => {
+  const cases = [[{ google: false, googleKey: 'test-key' }, 'Aš skaitau.'], [{ google: true, googleKey: '' }, 'Tu rašai.']]
+  for (const [settings, text] of cases) {
+    const bg = load({ settings, google: translate })
+    await bg.gloss([{ text, words: [text.split(' ')[1].replace('.', '')] }])
+    assert.deepEqual(bg.googleCalls, [])
+    assert.equal(bg.nativeCalls[0].blocks[0].translation, undefined)
+    await bg.close()
+  }
+})
+
+test('a Google error leaves the blocks without a translation, and the model still runs', async () => {
+  const bg = load({ settings: { google: true, googleKey: 'bad-key' }, google: () => ({ status: 403, json: { error: { message: 'API key not valid' } } }) })
+  await bg.gloss([{ text: 'Aš skaitau.', words: ['skaitau'] }])
+  assert.equal(bg.googleCalls.length, 1)
+  assert.equal(bg.nativeCalls.length, 1)
+  assert.equal(bg.nativeCalls[0].blocks[0].translation, undefined)
+  await bg.close()
+})

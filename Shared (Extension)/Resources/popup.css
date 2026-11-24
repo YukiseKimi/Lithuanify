@@ -155,3 +155,16 @@ h1 {
 .saved a {
     color: inherit;
 }
+
+.google-details {
+    margin: 4px 0 0;
+}
+
+.google-key {
+    box-sizing: border-box;
+    width: 100%;
+    font: inherit;
+    padding: 5px 8px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+}

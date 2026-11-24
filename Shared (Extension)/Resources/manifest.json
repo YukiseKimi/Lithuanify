@@ -30,5 +30,7 @@
         "default_icon": "images/toolbar-icon.svg"
     },
 
-    "permissions": [ "storage", "activeTab", "nativeMessaging" ]
+    "permissions": [ "storage", "activeTab", "nativeMessaging" ],
+
+    "host_permissions": [ "https://translation.googleapis.com/*" ]
 }

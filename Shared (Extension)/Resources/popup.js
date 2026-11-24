@@ -7,6 +7,9 @@ const smart = document.getElementById("smart");
 const modelStatus = document.getElementById("model-status");
 const mode = document.getElementById("mode");
 const hideCommon = document.getElementById("hide-common");
+const google = document.getElementById("google");
+const googleDetails = document.getElementById("google-details");
+const googleKey = document.getElementById("google-key");
 
 const t = (key, fallback) => browser.i18n.getMessage(key) || fallback;
 
@@ -20,9 +23,17 @@ function renderEnabled(enabled) {
     smart.disabled = !enabled;
     mode.disabled = !enabled;
     hideCommon.disabled = !enabled;
+    google.disabled = !enabled;
 }
 
-browser.storage.local.get(["enabled", "smart", "mode", "hideCommon"]).then((result) => {
+function renderGoogle(on) {
+    google.checked = on;
+    googleDetails.hidden = !on;
+}
+
+browser.storage.local.get(["enabled", "smart", "mode", "hideCommon", "google", "googleKey"]).then((result) => {
+    renderGoogle(result.google === true);
+    googleKey.value = typeof result.googleKey === "string" ? result.googleKey : "";
     renderEnabled(result.enabled !== false);
     smart.checked = result.smart !== false;
     mode.value = result.mode || "page";
@@ -52,6 +63,17 @@ mode.addEventListener("change", () => {
 
 hideCommon.addEventListener("change", () => {
     browser.storage.local.set({ hideCommon: Number(hideCommon.value) || 0 });
+});
+
+// Google Translate is off until the reader turns it on; the key stays in
+// this extension's storage.local and goes only to Google, in a header.
+google.addEventListener("change", () => {
+    renderGoogle(google.checked);
+    browser.storage.local.set({ google: google.checked });
+});
+
+googleKey.addEventListener("change", () => {
+    browser.storage.local.set({ googleKey: googleKey.value.trim() });
 });
 
 smart.addEventListener("change", () => {

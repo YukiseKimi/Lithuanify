@@ -28,9 +28,20 @@ Lithuanify runs **entirely on your device**, in two tiers:
    each one. The model only returns a number and a meaning per word, so its
    output stays short. Requires Apple Intelligence on a supported device.
 
-Nothing is sent to the network. Model results are cached per text block in
-IndexedDB, so revisited pages don't touch the model again. Pages that don't
-look Lithuanian are left alone.
+Nothing is sent to the network unless you turn on Google Translate (below).
+Model results are cached per text block in IndexedDB, so revisited pages
+don't touch the model again. Pages that don't look Lithuanian are left alone.
+
+### Optional: Google Translate as context
+
+Off by default. Turn it on in the toolbar popup and paste your own
+[Cloud Translation API](https://cloud.google.com/translate/docs/setup) key.
+Then each paragraph that goes to the on-device model is first translated
+into English by Google, and the model reads that translation to pick better
+meanings. **The text of those paragraphs goes to Google**; the dictionary
+glosses and everything else stay on the device. It needs the on-device AI,
+and the key stays in the extension's local storage and goes only to Google,
+in a request header. A Google error leaves the page glossed as without it.
 
 > Note: Apple's *Translation* framework can't be used here: it has no Lithuanian
 > (`LanguageAvailability` reports lt → en as unsupported). FoundationModels
@@ -47,7 +58,12 @@ look Lithuanian are left alone.
   - *Selected text*: only the words you highlight. This also works on pages
     that don't look Lithuanian. On iPhone and iPad, where there is no hover,
     this is the mode to use.
-- Context-aware meanings via the on-device language model.
+- Context-aware meanings via the on-device language model, optionally helped
+  by a Google Translate sentence translation.
+- **Word cards:** tap a gloss for its lemma, every meaning, where the meaning
+  came from and a Wiktionary link. **Save** a word, or mark it **known** to
+  hide its glosses everywhere. The **Saved words** page (from the popup)
+  lists, finds, removes and exports them as CSV for Anki.
 - **Priority + visible-first scheduling:** on-screen text translates first, then
   the rest fills in by priority (title → body → navigation/menus last).
 - **Foreground-only:** only the active tab spends the model; background tabs pause.
@@ -109,9 +125,9 @@ The dictionary has one line per Lithuanian lemma: its short English meaning, the
 node scripts/build-dictionary.mjs
 ```
 
-The script downloads its sources into `build/dictionary` (about 85 MB, ignored by git) and writes `Shared (Extension)/Resources/dictionary/`.
+The script downloads its sources into `build/dictionary` (about 620 MB, mostly the gzipped English Wiktionary; ignored by git) and writes `Shared (Extension)/Resources/dictionary/`.
 
-- English meanings and word forms: [Wiktionary](https://en.wiktionary.org), extracted by [Wiktextract](https://kaikki.org/dictionary/Lithuanian/), under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+- English meanings and word forms: [Wiktionary](https://en.wiktionary.org), extracted by [Wiktextract](https://kaikki.org/dictionary/Lithuanian/), under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Words with no Lithuanian entry of their own get meanings from the translation tables of English Wiktionary's entries ([the English extraction](https://kaikki.org/dictionary/English/)).
 - More word forms: the [Hunspell lt_LT](https://github.com/LibreOffice/dictionaries/tree/master/lt_LT) word list from LibreOffice, under the licence in `LICENSE-hunspell-lt.txt`.
 - Word frequency ranks: [FrequencyWords](https://github.com/hermitdave/FrequencyWords) by Hermit Dave, from OpenSubtitles, under CC BY-SA 4.0 (see `LICENSE-frequencywords.txt`). The popup's **Hide common words** setting uses them.
 

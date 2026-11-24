@@ -48,7 +48,7 @@
         "description": "Popup: status when Apple Intelligence cannot be used."
     },
     "popup_hint": {
-        "message": "Translations appear in small letters above recognised Lithuanian words. Choose whether to translate the whole page, only the paragraph you rest the pointer on, or only text you highlight. On-device AI uses Apple Intelligence for context-aware meanings — private and free. Dictionary meanings appear instantly; the AI fills in the rest. Nothing leaves your device.",
+        "message": "Translations appear in small letters above recognised Lithuanian words. Choose whether to translate the whole page, only the paragraph you rest the pointer on, or only text you highlight. On-device AI uses Apple Intelligence for context-aware meanings — private and free. Dictionary meanings appear instantly; the AI fills in the rest. Nothing leaves your device unless you turn on Google Translate.",
         "description": "Popup: explanation at the bottom."
     },
     "popup_hide_common": {
@@ -74,6 +74,14 @@
     "popup_credits_link": {
         "message": "Sources",
         "description": "Popup: link to the dictionary data's source page."
+    },
+    "popup_google": {
+        "message": "Google Translate",
+        "description": "Popup: switch for the opt-in Google Translate context."
+    },
+    "popup_google_note": {
+        "message": "Sends each paragraph the on-device AI glosses to Google, so the AI can pick better meanings. Needs the on-device AI and your own Cloud Translation API key.",
+        "description": "Popup: what turning on Google Translate does, and what it needs."
     },
     "popup_saved": {
         "message": "Saved words",

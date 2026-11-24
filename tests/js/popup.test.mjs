@@ -19,7 +19,7 @@ async function loadPopup(stored) {
   window.close = () => {}
   window.browser = {
     i18n: { getMessage: () => '' },
-    storage: { local: { get: async () => JSON.parse(JSON.stringify(stored)), set: async () => {} } },
+    storage: { local: { get: async () => JSON.parse(JSON.stringify(stored)), set: async (values) => { Object.assign(stored, values) } } },
     runtime: {
       sendMessage: async () => ({ available: false }),
       getURL: (path) => 'safari-web-extension://lithuanify/' + path
@@ -44,4 +44,30 @@ test('the popup links to the Saved words page with the number of saved words', a
 
   link.dispatchEvent(new popup.window.MouseEvent('click', { bubbles: true, cancelable: true }))
   assert.deepEqual(popup.created, [{ url: 'safari-web-extension://lithuanify/saved.html' }])
+})
+
+test('turning on Google Translate shows the key field, and the key is saved as typed', async () => {
+  const stored = { mode: 'page' }
+  const popup = await loadPopup(stored)
+  const google = popup.document.getElementById('google')
+  const details = popup.document.getElementById('google-details')
+  assert.equal(google.checked, false)
+  assert.equal(details.hidden, true)
+
+  google.checked = true
+  google.dispatchEvent(new popup.window.Event('change'))
+  assert.equal(details.hidden, false)
+  assert.equal(stored.google, true)
+
+  const key = popup.document.getElementById('google-key')
+  key.value = '  my-key  '
+  key.dispatchEvent(new popup.window.Event('change'))
+  assert.equal(stored.googleKey, 'my-key')
+})
+
+test('the popup shows Google Translate as it was left, with its key', async () => {
+  const popup = await loadPopup({ google: true, googleKey: 'saved-key' })
+  assert.equal(popup.document.getElementById('google').checked, true)
+  assert.equal(popup.document.getElementById('google-details').hidden, false)
+  assert.equal(popup.document.getElementById('google-key').value, 'saved-key')
 })

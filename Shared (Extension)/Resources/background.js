@@ -187,6 +187,54 @@ function sentenceOf(text, word) {
     return (found || text).trim();
 }
 
+// --- Google Translate (opt-in) -----------------------------------------------
+// Off by default. When the reader turns it on and gives an API key in the
+// popup, each block that goes to the model is translated into English first,
+// and the model reads the translation as context. The text of those blocks
+// goes to Google; nothing else does. Any error leaves the blocks as they were.
+
+const GOOGLE_URL = "https://translation.googleapis.com/language/translate/v2";
+
+async function googleKey() {
+    try {
+        const { google, googleKey: key } = await browser.storage.local.get(["google", "googleKey"]);
+        return google === true && typeof key === "string" && key.trim() ? key.trim() : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+// Returns one English string per text, or null when Google gave none.
+async function translateAll(texts, key) {
+    try {
+        const response = await fetch(GOOGLE_URL, {
+            method: "POST",
+            // The key goes in a header, so it never shows in a URL or a log of one.
+            headers: { "Content-Type": "application/json", "X-Goog-Api-Key": key },
+            body: JSON.stringify({ q: texts, source: "lt", target: "en", format: "text" })
+        });
+        if (!response.ok) {
+            console.warn(`[Lithuanify] Google Translate: HTTP ${response.status}`);
+            return null;
+        }
+        const data = await response.json();
+        const translations = data && data.data && data.data.translations;
+        if (!Array.isArray(translations) || translations.length !== texts.length) return null;
+        return translations.map((t) => (t && typeof t.translatedText === "string" ? t.translatedText : ""));
+    } catch (e) {
+        console.warn("[Lithuanify] Google Translate failed", e);
+        return null;
+    }
+}
+
+async function withTranslations(requests) {
+    const key = await googleKey();
+    if (!key || !requests.length) return requests;
+    const english = await translateAll(requests.map((r) => r.text), key);
+    if (!english) return requests;
+    return requests.map((r, i) => (english[i] ? { ...r, translation: english[i] } : r));
+}
+
 const PAUSE_MS = 60 * 1000;
 let pausedUntil = 0;
 
@@ -223,7 +271,7 @@ async function handleGloss(blocks) {
         try {
             resp = await browser.runtime.sendNativeMessage(NATIVE_APP_ID, {
                 command: "gloss",
-                blocks: entries.map((e) => e.request)
+                blocks: await withTranslations(entries.map((e) => e.request))
             });
         } catch (e) {
             resp = null;
