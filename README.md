@@ -32,9 +32,11 @@ Nothing is sent to the network. Model results are cached per text block in
 IndexedDB, so revisited pages don't touch the model again. Pages that don't
 look Lithuanian are left alone.
 
-> Note: Apple's *Translation* framework can't be used here — it only vends a
-> session from a SwiftUI view, and a web extension's native handler is headless.
-> FoundationModels works headlessly, which is why it powers the glosses.
+> Note: Apple's *Translation* framework can't be used here: it has no Lithuanian
+> (`LanguageAvailability` reports lt → en as unsupported). FoundationModels
+> doesn't list Lithuanian among its supported languages either, so its meanings
+> are a best effort: the dictionary comes first, and the model mostly picks
+> among dictionary meanings or fills in words the dictionary lacks.
 
 ## Features
 
@@ -96,6 +98,8 @@ JavaScript tests in `tests/js` (`node:test` with jsdom and fake-indexeddb),
 and builds the macOS and iOS targets. It stops at the first failure.
 `./scripts/check --tests-only` skips the two builds. The first run does an
 `npm ci`; the test libraries are for development only and do not ship.
+GitHub Actions runs the same checks on each push to `main` and each pull
+request (`.github/workflows/check.yml`).
 
 ## Dictionary data
 

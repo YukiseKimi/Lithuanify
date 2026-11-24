@@ -1,0 +1,28 @@
+# Runs scripts/check: the same checks as before each commit.
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  javascript:
+    name: JavaScript tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+
+  apple:
+    name: Swift tests and builds
+    # GitHub's Xcode 27 image (arm64, macOS 27).
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/check
