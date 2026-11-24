@@ -54,6 +54,55 @@ function render() {
 
 find.addEventListener("input", render);
 
+// --- Export ---
+// lemma, meaning, sentence: the front, back and extra of an Anki card.
+// RFC 4180 quoting, CRLF lines, and a BOM so spreadsheets read UTF-8.
+
+const CSV_NAME = "lithuanify-saved-words.csv";
+const exportButton = document.getElementById("export");
+
+const field = (text) => `"${String(text ?? "").replace(/"/g, '""')}"`;
+
+function toCsv(saved) {
+    const rows = saved.map((w) => [w.lemma || w.word, w.shown, w.sentence].map(field).join(","));
+    return "﻿" + ["lemma,meaning,sentence", ...rows].join("\r\n") + "\r\n";
+}
+
+// On a touch screen (iPhone, iPad) the share sheet saves the file to Files
+// or hands it to an app; elsewhere a download link saves it. If neither
+// works, the CSV goes to the clipboard.
+async function handOver(csv) {
+    const file = new File([csv], CSV_NAME, { type: "text/csv" });
+    const touch = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+    if (touch && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file] });
+        return "Shared";
+    }
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = CSV_NAME;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    return "Exported";
+}
+
+exportButton.addEventListener("click", async () => {
+    const csv = toCsv(words);
+    try {
+        exportButton.textContent = await handOver(csv);
+    } catch (e) {
+        if (e && e.name === "AbortError") return;  // the reader closed the share sheet
+        try {
+            await navigator.clipboard.writeText(csv);
+            exportButton.textContent = "Copied as CSV";
+        } catch (e2) {
+            exportButton.textContent = "Export failed";
+        }
+    }
+    setTimeout(() => { exportButton.textContent = "Export CSV"; }, 2500);
+});
+
 async function refresh() {
     words = await readSaved();
     render();

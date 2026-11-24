@@ -13,10 +13,20 @@ afterEach(() => { for (const window of open) window.close(); open.clear() })
 const word = (lemma, shown, sentence, savedAt) => ({ word: lemma, lemma, meanings: [shown], shown, sentence, savedAt })
 
 // The Saved words page in jsdom, over a storage.local that holds `stored`.
-async function loadSaved(stored) {
+async function loadSaved(stored, { touch = false } = {}) {
   const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true })
   const { window } = dom
   open.add(window)
+  // What the page hands the reader: a shared file, or a download.
+  const handed = []
+  window.matchMedia = (query) => ({ matches: touch && query === '(pointer: coarse)' })
+  window.URL.createObjectURL = (blob) => { handed.push({ via: 'download', blob }); return 'blob:csv' }
+  window.URL.revokeObjectURL = () => {}
+  window.HTMLAnchorElement.prototype.click = function () { handed[handed.length - 1].name = this.download }
+  if (touch) {
+    window.navigator.canShare = () => true
+    window.navigator.share = async ({ files }) => { handed.push({ via: 'share', blob: files[0], name: files[0].name }) }
+  }
   const listeners = []
   const copy = (v) => JSON.parse(JSON.stringify(v))
   window.browser = {
@@ -45,6 +55,19 @@ async function loadSaved(stored) {
     })),
     count: () => window.document.getElementById('count').textContent,
     empty: () => !window.document.getElementById('empty').hidden,
+    handed,
+    exportCsv: async () => {
+      window.document.getElementById('export').click()
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      const last = handed[handed.length - 1]
+      // jsdom's Blob has no text(); read the bytes, and keep the BOM.
+      const bytes = await new Promise((resolve) => {
+        const reader = new window.FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.readAsArrayBuffer(last.blob)
+      })
+      return { via: last.via, name: last.name, text: new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes) }
+    },
     settle: () => new Promise((resolve) => setTimeout(resolve, 20))
   }
   await page.settle()
@@ -100,4 +123,24 @@ test('× removes one saved word from storage and from the list', async () => {
   assert.equal('saved:šalis' in stored, false)
   assert.deepEqual(page.rows().map((r) => r.lemma), ['išvažiuoti'])
   assert.equal(page.count(), '1')
+})
+
+test('Export CSV gives a file of lemma, meaning and sentence, quoted for Anki', async () => {
+  const page = await loadSaved({
+    'saved:šalis': word('šalis', 'country', 'Lietuvos šalies miestas, "Vilnius".', 100),
+    'saved:išvažiuoti': word('išvažiuoti', 'go by vehicle', 'Brolis išvažiuoja.', 300)
+  })
+  const file = await page.exportCsv()
+  assert.equal(file.via, 'download')
+  assert.equal(file.name, 'lithuanify-saved-words.csv')
+  assert.equal(file.text, '\uFEFFlemma,meaning,sentence\r\n' +
+    '"išvažiuoti","go by vehicle","Brolis išvažiuoja."\r\n' +
+    '"šalis","country","Lietuvos šalies miestas, ""Vilnius""."\r\n')
+})
+
+test('on a touch screen, Export CSV hands the file to the share sheet', async () => {
+  const page = await loadSaved({ 'saved:šalis': word('šalis', 'country', 'a', 100) }, { touch: true })
+  const file = await page.exportCsv()
+  assert.equal(file.via, 'share')
+  assert.equal(file.name, 'lithuanify-saved-words.csv')
 })
