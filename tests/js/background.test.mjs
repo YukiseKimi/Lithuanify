@@ -216,6 +216,15 @@ test('nesu, nesi, nėra and the other merged ne- forms of būti mean "not be", n
   assert.equal(found.nėra.l, 'būti')
 })
 
+test('a reflexive verb with a prefix gets the plain verb as a hint only, for the model', async () => {
+  const bg = load({ dictionary: 'speak\tkalbėti\tkalba kalbėjo\tne\nmeet up\tsusitikti\tsusitiko\n' })
+  assert.deepEqual(await bg.lookup(['pasikalbėti', 'nesikalba', 'susitiko']), {
+    pasikalbėti: { m: ['speak'], l: 'pasikalbėti', r: 0, approx: true, from: 'kalbėti', hintOnly: true },
+    nesikalba: { m: ['not speak'], l: 'kalbėtis', r: 0, approx: true, from: 'kalbėti', hintOnly: true },
+    susitiko: { m: ['meet up'], l: 'susitikti', r: 0 }
+  })
+})
+
 test('a word that starts with nebe but negates with ne still gets "not"', async () => {
   const bg = load({ dictionary: sample })
   assert.deepEqual(firsts(await bg.lookup(['nebendras'])), { nebendras: 'not common' })

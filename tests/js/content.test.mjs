@@ -434,3 +434,30 @@ test('the card shows a saved word as saved, and follows a save or a removal in a
   page.changeSettings({ 'saved:kurti': { word: 'kuria', lemma: 'kurti', meanings: ['create'], shown: 'create', sentence: 'Jis kuria namą.', savedAt: 1 } })
   await waitFor(() => page.card().save === '★ Saved')
 })
+
+test('a hint-only meaning shows no gloss, and goes to the model as a hint when the AI is on', async () => {
+  const dictionary = { pasikalbėti: { m: ['speak'], l: 'pasikalbėti', approx: true, from: 'kalbėti', hintOnly: true } }
+  const off = await loadContent(lt('<p>Reikia pasikalbėti.</p>'), { dictionary, modelAvailable: false })
+  await off.settle()
+  assert.deepEqual(off.glosses(), [])
+
+  const on = await loadContent(lt('<p>Reikia pasikalbėti.</p>'), { dictionary })
+  await on.settle()
+  assert.deepEqual(on.sent[0], [{
+    text: 'Reikia pasikalbėti.', words: ['reikia', 'pasikalbėti'],
+    hints: [null, { lemma: 'pasikalbėti', options: ['speak'] }]
+  }])
+  on.tapGloss('pasikalbėti')
+  assert.deepEqual(on.card().meanings, ['G:pasikalbėti'])
+  assert.equal(on.card().source, 'On-device AI meaning')
+})
+
+test('a hint-only word whose model meaning is the hint is still credited to the model', async () => {
+  const page = await loadContent(lt('<p>Reikia pasikalbėti.</p>'), {
+    dictionary: { pasikalbėti: { m: ['speak'], l: 'pasikalbėti', approx: true, from: 'kalbėti', hintOnly: true } },
+    gloss: (blocks) => blocks.map(() => ({ reikia: 'need', pasikalbėti: 'speak' }))
+  })
+  await page.settle()
+  page.tapGloss('pasikalbėti')
+  assert.equal(page.card().source, 'On-device AI meaning')
+})

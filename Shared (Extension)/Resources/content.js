@@ -85,9 +85,13 @@ function isHidden(word) {
     return !!entry && entry.r > 0 && entry.r <= hideCommon;
 }
 
+// A meaning the page can show. A hint-only entry (a reflexive verb read as its
+// plain verb) is for the model, never a gloss of its own.
+const showable = (entry) => !!entry && !entry.hintOnly;
+
 function dictLookup(word) {
     const entry = entryFor(word);
-    return entry ? entry.m[0] : null;
+    return showable(entry) ? entry.m[0] : null;
 }
 
 // The model picks among several meanings, and confirms or replaces an
@@ -170,7 +174,7 @@ function aiActive() {
 // read as its plain verb), or the on-device model.
 function glossInfoFor(token, gloss, context) {
     const entry = entryFor(token);
-    const fromDictionary = !!entry && entry.m[0] === gloss;
+    const fromDictionary = showable(entry) && entry.m[0] === gloss;
     return {
         word: token,
         lower: token.toLowerCase(),
@@ -262,10 +266,14 @@ function renderBlock(node) {
             unknown.push(lower);
         }
     });
-    const hints = unknown.map((w) => (picks.has(w) ? { lemma: entryFor(w).l, options: entryFor(w).m } : null));
+    const hintFor = (w) => {
+        const entry = entryFor(w);
+        return picks.has(w) || (entry && entry.hintOnly) ? { lemma: entry.l, options: entry.m } : null;
+    };
+    const hints = unknown.map(hintFor);
 
     const record = { node, text, context: contextOf.get(node) || text, unknown, parts: null };
-    if (picks.size) record.hints = hints;
+    if (hints.some(Boolean)) record.hints = hints;
     if (glosses.some(Boolean)) {
         record.parts = splitNode(node, tokens, glosses, picks);
     } else {
@@ -723,7 +731,7 @@ function rankLabel(entry) {
 function sourceLine(info, shown) {
     const entry = info.entry;
     if (info.source === "model") {
-        const n = entry ? entry.m.indexOf(shown) + 1 : 0;
+        const n = showable(entry) ? entry.m.indexOf(shown) + 1 : 0;
         return n ? `On-device AI picked meaning ${n}` : "On-device AI meaning";
     }
     if (info.source === "approximate") {
@@ -813,7 +821,7 @@ function openCard(ruby, info) {
         if (openSaved && openSaved.button === save) showSaved(save, !!stored[key]);
     }, () => {});
 
-    const meanings = entry ? [...entry.m] : [];
+    const meanings = showable(entry) ? [...entry.m] : [];
     if (!meanings.includes(shown)) meanings.unshift(shown);
     const list = element("ol", "meanings");
     for (const meaning of meanings) list.append(element("li", meaning === shown ? "shown" : "", meaning));

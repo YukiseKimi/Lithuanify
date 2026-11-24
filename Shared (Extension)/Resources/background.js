@@ -356,6 +356,24 @@ function prefixedMeaning(meanings, word) {
     return null;
 }
 
+// A reflexive verb puts -si- after its prefix or after ne-: pa-si-kalbėti,
+// ne-si-jaudink. Its meaning can drift far from the plain verb (susitikti
+// "meet", tikti "suit"), so the plain verb's meaning is a hint for the
+// model only: `hintOnly` entries never show as a gloss on their own.
+const REFLEXIVE_PREFIXES = [...VERB_PREFIXES.filter((p) => p !== "api" && p !== "ati").map((p) => p + "si"), "nesi"];
+
+function reflexiveMeaning(meanings, word) {
+    for (const prefix of REFLEXIVE_PREFIXES) {
+        if (!word.startsWith(prefix) || word.length < prefix.length + MIN_STEM) continue;
+        const base = entryOf(meanings, word.slice(prefix.length));
+        if (!base || !base.ne) continue;
+        const hint = { m: base.m, r: 0, approx: true, from: base.l, hintOnly: true };
+        if (prefix === "nesi") return negated({ ...hint, l: base.l && base.l + "s" });
+        return { ...hint, l: base.l && prefix + base.l };
+    }
+    return null;
+}
+
 const negated = (entry) => ({ ...entry, m: entry.m.map((meaning) => "not " + meaning) });
 
 // ne- merges with the forms of būti that start with a vowel: ne + esu is
@@ -380,7 +398,7 @@ function meaningOf(meanings, word) {
         if (base && (base.ne || prefixed)) return negated({ m: base.m, l: base.l, r: 0 });
         if (!base && prefixed) return negated(prefixed);
     }
-    return prefixedMeaning(meanings, word);
+    return prefixedMeaning(meanings, word) || reflexiveMeaning(meanings, word);
 }
 
 async function handleLookup(words) {

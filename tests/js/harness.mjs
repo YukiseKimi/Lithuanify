@@ -110,7 +110,8 @@ export async function loadContent(html, { hideCommon = 0, mode = 'page', modelAv
               m: [].concat(dictionary[w].m || dictionary[w]),
               l: dictionary[w].l || null,
               r: dictionary[w].r || 0,
-              ...(dictionary[w].approx ? { approx: true, from: dictionary[w].from || null } : {})
+              ...(dictionary[w].approx ? { approx: true, from: dictionary[w].from || null } : {}),
+              ...(dictionary[w].hintOnly ? { hintOnly: true } : {})
             }]))
         }
         if (message.command === 'gloss') {
