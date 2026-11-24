@@ -182,6 +182,31 @@ test('a dictionary file that failed to load is read again on the next lookup', a
   assert.deepEqual(firsts(await bg.lookup(['knyga'])), { knyga: 'book' })
 })
 
+test('a verb with a prefix the dictionary lacks gets the meaning of the verb without it, marked approximate', async () => {
+  const bg = load({ dictionary: sample })
+  assert.deepEqual(await bg.lookup(['perskaito', 'paskaitau']), {
+    perskaito: { m: ['read'], l: 'perskaityti', r: 0, approx: true },
+    paskaitau: { m: ['read'], l: 'paskaityti', r: 0, approx: true }
+  })
+})
+
+test('a prefix is taken off only a word that Hunspell lets take ne, so nouns are not split', async () => {
+  const bg = load({ dictionary: sample })
+  assert.deepEqual(firsts(await bg.lookup(['pagaisro', 'sužinia', 'pask'])), {})
+})
+
+test('a negated verb with a prefix gets "not" before the meaning of the verb', async () => {
+  const bg = load({ dictionary: sample })
+  assert.deepEqual(await bg.lookup(['neperskaito']), {
+    neperskaito: { m: ['not read'], l: 'perskaityti', r: 0, approx: true }
+  })
+})
+
+test('a negated verb the dictionary knows with its prefix keeps its own meaning, not the plain verb\'s', async () => {
+  const bg = load({ dictionary: 'understand\tsuprasti\tsuprantu\nget used to\tprasti\tprantu\tne\n' })
+  assert.deepEqual(await bg.lookup(['nesuprantu']), { nesuprantu: { m: ['not understand'], l: 'suprasti', r: 0 } })
+})
+
 test('a word that starts with nebe but negates with ne still gets "not"', async () => {
   const bg = load({ dictionary: sample })
   assert.deepEqual(firsts(await bg.lookup(['nebendras'])), { nebendras: 'not common' })

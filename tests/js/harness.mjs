@@ -80,7 +80,12 @@ export async function loadContent(html, { hideCommon = 0, mode = 'page', modelAv
           lookups.push(plain(message.words))
           if (lookups.length <= lookupFailures) throw new Error('background gone')
           return Object.fromEntries(message.words.filter((w) => w in dictionary)
-            .map((w) => [w, { m: [].concat(dictionary[w].m || dictionary[w]), l: null, r: dictionary[w].r || 0 }]))
+            .map((w) => [w, {
+              m: [].concat(dictionary[w].m || dictionary[w]),
+              l: dictionary[w].l || null,
+              r: dictionary[w].r || 0,
+              ...(dictionary[w].approx ? { approx: true } : {})
+            }]))
         }
         if (message.command === 'gloss') {
           glossCalls += 1

@@ -87,9 +87,11 @@ function dictLookup(word) {
     return entry ? entry.m[0] : null;
 }
 
+// The model picks among several meanings, and confirms or replaces an
+// approximate one (the plain verb's meaning for a prefixed verb).
 function needsPick(word) {
     const entry = entryFor(word);
-    return !!entry && entry.m.length > 1 && aiActive();
+    return !!entry && (entry.m.length > 1 || !!entry.approx) && aiActive();
 }
 
 const MAX_PHRASE_WORDS = 3;

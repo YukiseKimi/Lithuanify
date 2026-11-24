@@ -337,15 +337,40 @@ function loadDictionary() {
 
 const NEGATIONS = ["nebe", "ne"];
 
+// Verb prefixes, longest first (Hunspell lt_LT's PFX flags a–l). Wiktionary
+// lacks many prefixed verbs (sukurti, užimti) whose plain verb it has
+// (kurti, imti). The plain verb's meaning is close but not exact, so it is
+// marked approximate for the model to confirm or replace.
+const VERB_PREFIXES = ["api", "ati", "par", "per", "pra", "pri", "ap", "at", "iš", "nu", "pa", "su", "už", "į"];
+const MIN_STEM = 3;
+
+// Only a word that Hunspell lets take ne- (a verb or adjective form) is
+// split, so a noun that happens to start like a prefix is left alone.
+function prefixedMeaning(meanings, word) {
+    for (const prefix of VERB_PREFIXES) {
+        if (!word.startsWith(prefix) || word.length < prefix.length + MIN_STEM) continue;
+        const base = entryOf(meanings, word.slice(prefix.length));
+        if (base && base.ne) return { m: base.m, l: base.l && prefix + base.l, r: 0, approx: true };
+    }
+    return null;
+}
+
+const negated = (entry) => ({ ...entry, m: entry.m.map((meaning) => "not " + meaning) });
+
 function meaningOf(meanings, word) {
     const entry = entryOf(meanings, word);
     if (entry) return { m: entry.m, l: entry.l, r: entry.r };
     for (const prefix of NEGATIONS) {
         if (!word.startsWith(prefix) || word.length <= prefix.length + 2) continue;
-        const base = entryOf(meanings, word.slice(prefix.length));
-        if (base && base.ne) return { m: base.m.map((meaning) => "not " + meaning), l: base.l, r: 0 };
+        const rest = word.slice(prefix.length);
+        const base = entryOf(meanings, rest);
+        const prefixed = prefixedMeaning(meanings, rest);
+        // Hunspell makes most prefixed verbs (suprasti) from the plain verb, so
+        // only the plain verb carries ne; a prefixed verb takes ne all the same.
+        if (base && (base.ne || prefixed)) return negated({ m: base.m, l: base.l, r: 0 });
+        if (!base && prefixed) return negated(prefixed);
     }
-    return null;
+    return prefixedMeaning(meanings, word);
 }
 
 async function handleLookup(words) {
