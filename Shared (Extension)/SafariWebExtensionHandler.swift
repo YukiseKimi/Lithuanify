@@ -59,9 +59,10 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             return
         }
         Task {
-            let answer = await Glosser.gloss(blocks)
+            let run = await Glosser.gloss(blocks, first: SessionPool.shared.take(), fresh: SessionPool.makeSession)
+            if !run.rateLimited { SessionPool.shared.fillIfEmpty() }
             self.complete(context, with: [
-                "available": true, "results": answer.results, "ok": answer.ok, "rateLimited": answer.rateLimited,
+                "available": true, "results": run.results, "ok": run.ok, "rateLimited": run.rateLimited,
             ])
         }
     }
@@ -74,77 +75,38 @@ final class SessionPool: Sendable {
 
     private let warm = Mutex<LanguageModelSession?>(nil)
 
-    static func makeSession() -> LanguageModelSession {
+    static func makeSession() -> ModelSession {
+        ModelSession(session: newModelSession())
+    }
+
+    private static func newModelSession() -> LanguageModelSession {
         LanguageModelSession(
             model: SystemLanguageModel(guardrails: .permissiveContentTransformations),
             instructions: GlossCore.instructions
         )
     }
 
-    func take() -> LanguageModelSession {
-        warm.withLock { $0.take() } ?? Self.makeSession()
+    func take() -> ModelSession {
+        ModelSession(session: warm.withLock { $0.take() } ?? Self.newModelSession())
     }
 
     func fillIfEmpty() {
         guard AIStatus.current == .ready else { return }
         warm.withLock { warm in
             guard warm == nil else { return }
-            let session = Self.makeSession()
+            let session = Self.newModelSession()
             session.prewarm()
             warm = session
         }
     }
 }
 
-enum Glosser {
+/// Apple's on-device model as a GlossSession: one turn per job, errors sorted
+/// into the outcomes Glosser acts on.
+struct ModelSession: GlossSession {
+    let session: LanguageModelSession
 
-    static let maxTurnsPerSession = 4
-
-    enum Outcome {
-        case answered([WordAnswer])
-        case failed
-        case rateLimited
-    }
-
-    static func gloss(_ blocks: [GlossBlock]) async -> (results: [[String]], ok: [Bool], rateLimited: Bool) {
-        var results = blocks.map { Array(repeating: "", count: $0.words.count) }
-        var ok = Array(repeating: true, count: blocks.count)
-        let jobs = GlossCore.makeJobs(blocks)
-        guard !jobs.isEmpty else { return (results, ok, false) }
-
-        var session = SessionPool.shared.take()
-        var turns = 0
-
-        for (n, job) in jobs.enumerated() {
-            if turns >= maxTurnsPerSession {
-                session = SessionPool.makeSession()
-                turns = 0
-            }
-            var outcome = await run(job, on: session)
-            turns += 1
-            if case .failed = outcome, turns > 1 {
-                session = SessionPool.makeSession()
-                outcome = await run(job, on: session)
-                turns = 1
-            }
-            switch outcome {
-            case .answered(let items):
-                GlossCore.apply(items, of: job, to: &results)
-            case .failed:
-                for target in job.targets { ok[target.block] = false }
-            case .rateLimited:
-                for rest in jobs[n...] {
-                    for target in rest.targets { ok[target.block] = false }
-                }
-                return (results, ok, true)
-            }
-        }
-
-        SessionPool.shared.fillIfEmpty()
-        return (results, ok, false)
-    }
-
-    private static func run(_ job: GlossCore.Job, on session: LanguageModelSession) async -> Outcome {
+    func answer(_ job: GlossCore.Job) async -> GlossOutcome {
         do {
             let response = try await session.respond(
                 to: GlossCore.prompt(for: job),
@@ -156,6 +118,9 @@ enum Glosser {
         } catch LanguageModelSession.GenerationError.rateLimited {
             logger.notice("Gloss rate limited")
             return .rateLimited
+        } catch LanguageModelSession.GenerationError.guardrailViolation, LanguageModelSession.GenerationError.refusal {
+            logger.notice("Gloss refused by the model's guardrails")
+            return .refused
         } catch {
             logger.error("Gloss failed: \(String(describing: error), privacy: .private)")
             return .failed
