@@ -418,3 +418,19 @@ test('two forms of one lemma make one saved entry, with the newest sentence', as
   await page.pressSave()
   assert.equal(page.stored('saved:kurti').sentence, 'Jis kūrė dainą.')
 })
+
+test('the card shows a saved word as saved, and follows a save or a removal in another tab', async () => {
+  const page = await loadContent(lt('<p>Jis kuria namą. Jis kūrė dainą.</p>'), {
+    dictionary: { kuria: { m: ['create'], l: 'kurti' }, kūrė: { m: ['create'], l: 'kurti' } }, modelAvailable: false
+  })
+  await page.settle()
+  page.tapGloss('kuria')
+  await page.pressSave()
+  page.tapGloss('kūrė')
+  await waitFor(() => page.card().save === '★ Saved')
+
+  page.changeSettings({ 'saved:kurti': undefined })
+  await waitFor(() => page.card().save === '☆ Save')
+  page.changeSettings({ 'saved:kurti': { word: 'kuria', lemma: 'kurti', meanings: ['create'], shown: 'create', sentence: 'Jis kuria namą.', savedAt: 1 } })
+  await waitFor(() => page.card().save === '★ Saved')
+})

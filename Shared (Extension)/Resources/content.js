@@ -807,6 +807,11 @@ function openCard(ruby, info) {
         }
     });
     head.append(save);
+    const key = savedKey(info);
+    openSaved = { key, button: save };
+    browser.storage.local.get(key).then((stored) => {
+        if (openSaved && openSaved.button === save) showSaved(save, !!stored[key]);
+    }, () => {});
 
     const meanings = entry ? [...entry.m] : [];
     if (!meanings.includes(shown)) meanings.unshift(shown);
@@ -832,8 +837,18 @@ function openCard(ruby, info) {
 function closeCard() {
     document.removeEventListener("keydown", onCardKey, true);
     document.removeEventListener("scroll", closeCard, true);
+    openSaved = null;
     if (cardHost) cardHost.hidden = true;
 }
+
+// The open card's saved-word key and its button, so that a save or a removal
+// in another tab (or another card) shows on it at once.
+let openSaved = null;
+
+browser.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !openSaved || !(openSaved.key in changes)) return;
+    showSaved(openSaved.button, !!changes[openSaved.key].newValue);
+});
 
 function onCardKey(event) {
     if (event.key === "Escape") closeCard();
