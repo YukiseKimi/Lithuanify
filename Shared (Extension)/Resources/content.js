@@ -662,7 +662,7 @@ const CARD_CSS = `
 :host { all: initial; position: fixed; z-index: 2147483647; }
 :host([hidden]) { display: none; }
 .card {
-    --bg: #ffffff; --fg: #1c1b19; --muted: #77726a; --line: #e6e1d6; --accent: #2f62c8; --foot: #f8f6f1;
+    --bg: #ffffff; --fg: #1c1b19; --muted: #77726a; --line: #e6e1d6; --accent: #2f62c8; --foot: #f8f6f1; --saved: #b4541f;
     width: max-content; min-width: 180px; max-width: min(300px, calc(100vw - 16px));
     font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     color: var(--fg); background: var(--bg);
@@ -670,12 +670,15 @@ const CARD_CSS = `
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
 }
 @media (prefers-color-scheme: dark) {
-    .card { --bg: #26282c; --fg: #ecebe8; --muted: #a29e96; --line: #3a3d42; --accent: #8fb1ff; --foot: #2c2f34; }
+    .card { --bg: #26282c; --fg: #ecebe8; --muted: #a29e96; --line: #3a3d42; --accent: #8fb1ff; --foot: #2c2f34; --saved: #f0a070; }
 }
 .head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 9px 12px 7px; border-bottom: 1px solid var(--line); }
 .word { font-weight: 650; font-size: 15px; }
 .form { color: var(--muted); }
-.rank { margin-left: auto; font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; }
+.rank { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; }
+.save { margin-left: auto; font: 600 12px/1.4 inherit; color: var(--accent); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; cursor: pointer; }
+.save[aria-pressed="true"] { color: var(--saved); border-color: var(--saved); }
+.save:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .meanings { margin: 0; padding: 8px 12px 8px 30px; }
 .meanings li.shown { font-weight: 650; color: var(--accent); }
 .foot { display: flex; justify-content: space-between; gap: 12px; padding: 7px 12px; border-top: 1px solid var(--line); background: var(--foot); border-radius: 0 0 10px 10px; color: var(--muted); font-size: 11px; }
@@ -736,6 +739,53 @@ function wiktionaryUrl(info) {
     return `https://en.wiktionary.org/wiki/${encodeURIComponent(word)}#Lithuanian`;
 }
 
+// --- Saved words ---
+// One storage.local key for each lemma ("saved:kurti"), so two tabs that save
+// different words never write the same record.
+
+const SENTENCE_RE = /[^.!?;\n]+[.!?;\n]*/g;
+
+// The sentence of `text` that holds `word`, or the whole text.
+function sentenceOf(text, word) {
+    const sentences = text.match(SENTENCE_RE) || [text];
+    const found = sentences.find((sentence) =>
+        (sentence.toLowerCase().match(/\p{L}+/gu) || []).includes(word));
+    return (found || text).trim();
+}
+
+function savedKey(info) {
+    return "saved:" + ((info.entry && info.entry.l) || info.lower);
+}
+
+function savedWordFrom(info, shown) {
+    const entry = info.entry;
+    return {
+        word: info.lower,
+        lemma: entry ? entry.l : null,
+        meanings: entry ? [...entry.m] : [shown],
+        shown,
+        sentence: sentenceOf(info.context, info.lower),
+        savedAt: Date.now()
+    };
+}
+
+// Saves the word, or removes it when it is saved. Resolves to the new state.
+async function toggleSaved(info, shown) {
+    const key = savedKey(info);
+    const stored = await browser.storage.local.get(key);
+    if (stored[key]) {
+        await browser.storage.local.remove(key);
+        return false;
+    }
+    await browser.storage.local.set({ [key]: savedWordFrom(info, shown) });
+    return true;
+}
+
+function showSaved(button, saved) {
+    button.textContent = saved ? "★ Saved" : "☆ Save";
+    button.setAttribute("aria-pressed", String(saved));
+}
+
 function openCard(ruby, info) {
     const shown = ruby.lastChild.textContent;
     const entry = info.entry;
@@ -746,6 +796,17 @@ function openCard(ruby, info) {
     if (entry && entry.l && entry.l !== info.lower) head.append(element("span", "form", `form of ${entry.l}`));
     const rank = rankLabel(entry);
     if (rank) head.append(element("span", "rank", rank));
+    const save = element("button", "save");
+    save.type = "button";
+    showSaved(save, false);
+    save.addEventListener("click", async () => {
+        try {
+            showSaved(save, await toggleSaved(info, shown));
+        } catch (e) {
+            save.textContent = "Not saved";
+        }
+    });
+    head.append(save);
 
     const meanings = entry ? [...entry.m] : [];
     if (!meanings.includes(shown)) meanings.unshift(shown);

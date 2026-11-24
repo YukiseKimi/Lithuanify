@@ -381,3 +381,40 @@ test('the card links the lemma, or else the word, to the Lithuanian entry on Wik
   page.tapGloss('žmonės')
   assert.equal(page.card().link, 'https://en.wiktionary.org/wiki/%C5%BEmon%C4%97s#Lithuanian')
 })
+
+test('Save on the card keeps the word with its lemma, meanings and sentence, and a second tap removes it', async () => {
+  const page = await loadContent(lt('<p>Vilnius yra didelis. Lietuvos šalies miestas yra gražus!</p>'), {
+    dictionary: { šalies: { m: ['land', 'country'], l: 'šalis' } }, modelAvailable: false
+  })
+  await page.settle()
+  page.tapGloss('šalies')
+  assert.equal(page.card().save, '☆ Save')
+
+  await page.pressSave()
+  assert.equal(page.card().save, '★ Saved')
+  const saved = page.stored('saved:šalis')
+  assert.ok(saved.savedAt > 0)
+  delete saved.savedAt
+  assert.deepEqual(saved, {
+    word: 'šalies', lemma: 'šalis', meanings: ['land', 'country'], shown: 'land',
+    sentence: 'Lietuvos šalies miestas yra gražus!'
+  })
+
+  await page.pressSave()
+  assert.equal(page.card().save, '☆ Save')
+  assert.equal(page.stored('saved:šalis'), undefined)
+})
+
+test('two forms of one lemma make one saved entry, with the newest sentence', async () => {
+  const page = await loadContent(lt('<p>Jis kuria namą.</p><p>Jis kūrė dainą.</p>'), {
+    dictionary: { kuria: { m: ['create'], l: 'kurti' }, kūrė: { m: ['create'], l: 'kurti' } }, modelAvailable: false
+  })
+  await page.settle()
+  page.tapGloss('kuria')
+  await page.pressSave()
+  page.tapGloss('kūrė')
+  await page.pressSave()
+  assert.equal(page.stored('saved:kurti'), undefined)
+  await page.pressSave()
+  assert.equal(page.stored('saved:kurti').sentence, 'Jis kūrė dainą.')
+})
