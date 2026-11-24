@@ -71,3 +71,33 @@ test('with nothing saved, the page says how to save a word', async () => {
   assert.equal(page.empty(), true)
   assert.equal(page.count(), '0')
 })
+
+test('Find filters by lemma or meaning, with or without diacritics', async () => {
+  const page = await loadSaved({
+    'saved:šalis': word('šalis', 'country', 'a', 100),
+    'saved:išvažiuoti': word('išvažiuoti', 'go by vehicle', 'b', 300)
+  })
+  const find = page.document.getElementById('find')
+  const search = (text) => { find.value = text; find.dispatchEvent(new page.window.Event('input', { bubbles: true })) }
+
+  search('sali')
+  assert.deepEqual(page.rows().map((r) => r.lemma), ['šalis'])
+  search('VEHICLE')
+  assert.deepEqual(page.rows().map((r) => r.lemma), ['išvažiuoti'])
+  search('')
+  assert.deepEqual(page.rows().map((r) => r.lemma), ['išvažiuoti', 'šalis'])
+  assert.equal(page.count(), '2')
+})
+
+test('× removes one saved word from storage and from the list', async () => {
+  const stored = {
+    'saved:šalis': word('šalis', 'country', 'a', 100),
+    'saved:išvažiuoti': word('išvažiuoti', 'go by vehicle', 'b', 300)
+  }
+  const page = await loadSaved(stored)
+  page.document.querySelector('#list li:last-child button.remove').click()
+  await page.settle()
+  assert.equal('saved:šalis' in stored, false)
+  assert.deepEqual(page.rows().map((r) => r.lemma), ['išvažiuoti'])
+  assert.equal(page.count(), '1')
+})

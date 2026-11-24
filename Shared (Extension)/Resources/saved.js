@@ -6,6 +6,15 @@ const SAVED_PREFIX = "saved:";
 const list = document.getElementById("list");
 const count = document.getElementById("count");
 const empty = document.getElementById("empty");
+const find = document.getElementById("find");
+
+// Lowercase, without diacritics, as the dictionary matches: "sali" finds šalis.
+const fold = (text) => String(text).toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
+
+function matches(saved, query) {
+    const q = fold(query.trim());
+    return !q || [saved.lemma || saved.word, ...(saved.meanings || []), saved.shown].some((t) => fold(t).includes(q));
+}
 
 let words = [];  // [{ key, word, lemma, meanings, shown, sentence, savedAt }], newest first
 
@@ -28,15 +37,22 @@ function row(saved) {
     const li = element("li");
     const head = element("div", "head");
     head.append(element("span", "lemma", saved.lemma || saved.word), element("span", "meaning", saved.shown));
-    li.append(head, element("p", "sentence", saved.sentence));
+    const remove = element("button", "remove", "×");
+    remove.type = "button";
+    remove.setAttribute("aria-label", `Remove ${saved.lemma || saved.word}`);
+    // storage.onChanged then redraws this page and every open word card.
+    remove.addEventListener("click", () => browser.storage.local.remove(saved.key));
+    li.append(head, remove, element("p", "sentence", saved.sentence));
     return li;
 }
 
 function render() {
-    list.replaceChildren(...words.map(row));
+    list.replaceChildren(...words.filter((saved) => matches(saved, find.value)).map(row));
     count.textContent = String(words.length);
     empty.hidden = words.length > 0;
 }
+
+find.addEventListener("input", render);
 
 async function refresh() {
     words = await readSaved();

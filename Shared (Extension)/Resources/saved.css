@@ -103,3 +103,32 @@ h1 {
     color: var(--muted);
     font: italic 14px/1.4 Georgia, serif;
 }
+
+.find {
+    flex: 1 1 200px;
+    min-width: 0;
+    font: inherit;
+    color: var(--fg);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 10px;
+}
+
+.remove {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+    align-self: center;
+    font-size: 20px;
+    line-height: 1;
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    padding: 4px 6px;
+    cursor: pointer;
+}
+
+.remove:hover,
+.remove:focus-visible {
+    color: var(--fg);
+}
