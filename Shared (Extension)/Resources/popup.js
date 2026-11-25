@@ -11,6 +11,8 @@ const google = document.getElementById("google");
 const googleDetails = document.getElementById("google-details");
 const googleKey = document.getElementById("google-key");
 const googleNeedsAi = document.getElementById("google-needs-ai");
+const googleOffline = document.getElementById("google-offline");
+const googleOfflineNote = document.getElementById("google-offline-note");
 let modelReady = null;  // the on-device model's availability, once the background answers
 
 const t = (key, fallback) => browser.i18n.getMessage(key) || fallback;
@@ -36,7 +38,14 @@ function renderGoogle() {
     google.disabled = !toggle.checked || !aiOn;
     googleNeedsAi.hidden = aiOn;
     googleDetails.hidden = !(google.checked && aiOn);
+    googleOfflineNote.hidden = navigator.onLine;
 }
+
+// Google Translate needs the internet. Offline (navigator.onLine is false
+// only when there is surely no connection), turning it on says so; the
+// setting is still kept, and the note under the key stays while offline.
+window.addEventListener("online", renderGoogle);
+window.addEventListener("offline", renderGoogle);
 
 browser.storage.local.get(["enabled", "smart", "mode", "hideCommon", "google", "googleKey"]).then((result) => {
     google.checked = result.google === true;
@@ -79,6 +88,7 @@ hideCommon.addEventListener("change", () => {
 google.addEventListener("change", () => {
     renderGoogle();
     browser.storage.local.set({ google: google.checked });
+    if (google.checked && !navigator.onLine) googleOffline.showModal();
 });
 
 googleKey.addEventListener("change", () => {
