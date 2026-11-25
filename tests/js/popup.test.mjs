@@ -2,38 +2,30 @@ import { test, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { JSDOM } from 'jsdom'
+import { closeAll, fakeBrowser, openWindow, runScript, settled } from './harness.mjs'
 
 const resources = fileURLToPath(new URL('../../Shared (Extension)/Resources/', import.meta.url))
 const html = readFileSync(resources + 'popup.html', 'utf8').replace(/<script[^>]*><\/script>/g, '')
 const script = readFileSync(resources + 'popup.js', 'utf8')
-const open = new Set()
-afterEach(() => { for (const window of open) window.close(); open.clear() })
+afterEach(closeAll)
 
 // The toolbar popup in jsdom, over a storage.local that holds `stored`.
 async function loadPopup(stored, { modelAvailable = true, online = true } = {}) {
-  const dom = new JSDOM(html, { runScripts: 'dangerously' })
-  const { window } = dom
-  open.add(window)
+  const window = openWindow(html)
   const connection = { online }
   Object.defineProperty(window.navigator, 'onLine', { get: () => connection.online })
   // jsdom has <dialog> but no showModal.
   window.HTMLDialogElement.prototype.showModal = function () { this.open = true }
   const created = []
   window.close = () => {}
-  window.browser = {
-    i18n: { getMessage: () => '' },
-    storage: { local: { get: async () => JSON.parse(JSON.stringify(stored)), set: async (values) => { Object.assign(stored, values) } } },
-    runtime: {
-      sendMessage: async () => ({ available: modelAvailable }),
-      getURL: (path) => 'safari-web-extension://lithuanify/' + path
-    },
+  const fake = fakeBrowser(stored, {
+    runtime: { sendMessage: async () => ({ available: modelAvailable }) },
     tabs: { create: async (options) => { created.push(JSON.parse(JSON.stringify(options))) } }
-  }
-  const el = window.document.createElement('script')
-  el.textContent = script
-  window.document.body.append(el)
-  await new Promise((resolve) => setTimeout(resolve, 20))
+  })
+  fake.browser.runtime.getURL = (path) => 'safari-web-extension://lithuanify/' + path
+  window.browser = fake.browser
+  runScript(window, script)
+  await settled(fake)
   const setOnline = (value) => { connection.online = value; window.dispatchEvent(new window.Event(value ? 'online' : 'offline')) }
   return { window, document: window.document, created, setOnline }
 }

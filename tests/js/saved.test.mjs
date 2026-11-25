@@ -2,22 +2,19 @@ import { test, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { JSDOM } from 'jsdom'
+import { closeAll, fakeBrowser, openWindow, runScript, settled, waitFor } from './harness.mjs'
 
 const resources = fileURLToPath(new URL('../../Shared (Extension)/Resources/', import.meta.url))
 const html = readFileSync(resources + 'saved.html', 'utf8').replace(/<script[^>]*><\/script>/g, '')
 const script = readFileSync(resources + 'saved.js', 'utf8')
-const open = new Set()
-afterEach(() => { for (const window of open) window.close(); open.clear() })
+afterEach(closeAll)
 
 const word = (lemma, shown, sentence, savedAt) => ({ word: lemma, lemma, meanings: [shown], shown, sentence, savedAt })
 
 // The Saved words page in jsdom, over a storage.local that holds `stored`.
-async function loadSaved(stored, { touch = false } = {}) {
-  const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true })
-  const { window } = dom
-  open.add(window)
-  // What the page hands the reader: a shared file, or a download.
+async function loadSaved(stored, { touch = false, share = null } = {}) {
+  const window = openWindow(html, { pretendToBeVisual: true })
+  // What the page hands the reader: a shared file, a download, or the clipboard.
   const handed = []
   window.matchMedia = (query) => ({ matches: touch && query === '(pointer: coarse)' })
   window.URL.createObjectURL = (blob) => { handed.push({ via: 'download', blob }); return 'blob:csv' }
@@ -25,26 +22,15 @@ async function loadSaved(stored, { touch = false } = {}) {
   window.HTMLAnchorElement.prototype.click = function () { handed[handed.length - 1].name = this.download }
   if (touch) {
     window.navigator.canShare = () => true
-    window.navigator.share = async ({ files }) => { handed.push({ via: 'share', blob: files[0], name: files[0].name }) }
+    window.navigator.share = share || (async ({ files }) => { handed.push({ via: 'share', blob: files[0], name: files[0].name }) })
   }
-  const listeners = []
-  const copy = (v) => JSON.parse(JSON.stringify(v))
-  window.browser = {
-    storage: {
-      local: {
-        get: async (keys) => copy(keys === null ? stored : Object.fromEntries([].concat(keys).filter((k) => k in stored).map((k) => [k, stored[k]]))),
-        remove: async (keys) => {
-          const changes = {}
-          for (const k of [].concat(keys)) { changes[k] = { oldValue: stored[k] }; delete stored[k] }
-          listeners.forEach((l) => l(changes, 'local'))
-        }
-      },
-      onChanged: { addListener: (l) => listeners.push(l) }
-    }
-  }
-  const el = window.document.createElement('script')
-  el.textContent = script
-  window.document.body.append(el)
+  Object.defineProperty(window.navigator, 'clipboard', {
+    value: { writeText: async (text) => { handed.push({ via: 'clipboard', text }) } }
+  })
+  const fake = fakeBrowser(stored)
+  window.browser = fake.browser
+  runScript(window, script)
+  const exportButton = () => window.document.getElementById('export')
   const page = {
     window,
     document: window.document,
@@ -56,9 +42,15 @@ async function loadSaved(stored, { touch = false } = {}) {
     count: () => window.document.getElementById('count').textContent,
     empty: () => !window.document.getElementById('empty').hidden,
     handed,
+    exportLabel: () => exportButton().textContent,
+    // Presses Export CSV and waits until the button says how it went.
+    pressExport: async () => {
+      exportButton().click()
+      await waitFor(() => exportButton().textContent !== 'Export CSV' || handed.length > 0)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    },
     exportCsv: async () => {
-      window.document.getElementById('export').click()
-      await new Promise((resolve) => setTimeout(resolve, 20))
+      await page.pressExport()
       const last = handed[handed.length - 1]
       // jsdom's Blob has no text(); read the bytes, and keep the BOM.
       const bytes = await new Promise((resolve) => {
@@ -68,7 +60,7 @@ async function loadSaved(stored, { touch = false } = {}) {
       })
       return { via: last.via, name: last.name, text: new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes) }
     },
-    settle: () => new Promise((resolve) => setTimeout(resolve, 20))
+    settle: () => settled(fake)
   }
   await page.settle()
   return page
@@ -161,4 +153,22 @@ test('the page lists known words, and × forgets one', async () => {
   await page.settle()
   assert.equal('known:knyga' in stored, false)
   assert.deepEqual(known(), ['aš'])
+})
+
+test('when the share sheet fails, Export CSV copies the file to the clipboard instead', async () => {
+  const share = async () => { throw Object.assign(new Error('not allowed'), { name: 'NotAllowedError' }) }
+  const page = await loadSaved({ 'saved:šalis': word('šalis', 'country', 'a', 100) }, { touch: true, share })
+  await page.pressExport()
+  assert.deepEqual(page.handed, [{ via: 'clipboard', text: '﻿lemma,meaning,sentence\r\n"šalis","country","a"\r\n' }])
+  assert.equal(page.exportLabel(), 'Copied as CSV')
+})
+
+test('closing the share sheet exports nothing and copies nothing', async () => {
+  const share = async () => { throw Object.assign(new Error('closed'), { name: 'AbortError' }) }
+  const page = await loadSaved({ 'saved:šalis': word('šalis', 'country', 'a', 100) }, { touch: true, share })
+  page.document.getElementById('export').click()
+  // The rejected share settles in microtasks; one turn of the event loop covers it.
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.deepEqual(page.handed, [])
+  assert.equal(page.exportLabel(), 'Export CSV')
 })
