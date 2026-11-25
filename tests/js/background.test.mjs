@@ -1,6 +1,6 @@
 import { test, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { loadBackground, waitFor } from './harness.mjs'
+import { loadBackground } from './harness.mjs'
 
 const reply = (message) => ({
   available: true,
@@ -99,6 +99,7 @@ test('the memory cache stays bounded when site storage is blocked', async () => 
 
   await bg.gloss(blocks)
 
+  // A memory bound has no outside view, so this one test reads the cache itself.
   assert.equal(bg.state('memCache.size'), 5000)
   assert.equal(bg.state('dirty.size'), 5000)
   assert.equal(bg.state('memCache.has(keyOf("Sakinys 0.", "sakinys"))'), false)
@@ -107,6 +108,7 @@ test('the memory cache stays bounded when site storage is blocked', async () => 
 test('a save on a closed cache connection keeps its entries for the next save', async () => {
   const bg = load({
     native: (message, call) => {
+      // Safari can close the cache connection at any time; do it mid-request.
       if (call === 2) bg.state('dbPromise.then((db) => db.close())')
       return reply(message)
     }
@@ -115,8 +117,8 @@ test('a save on a closed cache connection keeps its entries for the next save', 
 
   const result = await bg.gloss([{ text: 'Karas tęsiasi.', words: ['karas'] }])
   assert.deepEqual(result.results, [{ karas: 'G:karas' }])
-  await waitFor(() => bg.state('dirty.size === 1 && dbPromise === null'))
-  await bg.state('flushCache()')
+  await bg.gloss([{ text: 'Tu rašai.', words: ['rašai'] }])
+  await bg.close()
 
   const fresh = load({ native: reply })
   await fresh.gloss([{ text: 'Karas tęsiasi.', words: ['karas'] }])
@@ -290,9 +292,12 @@ test('after a rate limit the model is not asked for a minute, and the page is to
   assert.equal(second.paused, true)
   assert.equal(bg.nativeCalls.length, 1)
 
-  bg.state('pausedUntil = 0')
+  bg.advance(59_000)
+  assert.equal((await bg.gloss([{ text: 'Karas tęsiasi.', words: ['karas'] }])).paused, true)
+  bg.advance(1_000)
   const third = await bg.gloss([{ text: 'Karas tęsiasi.', words: ['karas'] }])
   assert.deepEqual(third.results, [{ karas: 'G:karas' }])
+  assert.equal(bg.nativeCalls.length, 2)
 })
 
 test('a lookup gives the frequency rank of a word', async () => {
@@ -302,10 +307,11 @@ test('a lookup gives the frequency rank of a word', async () => {
 })
 
 const translate = (body) => ({ status: 200, json: { data: { translations: body.q.map((text) => ({ translatedText: 'EN: ' + text })) } } })
+const googleOn = { google: true, googleKey: 'test-key' }
 
 test('with Google Translate on, each block goes to the model with its English translation', async () => {
   const bg = load({
-    settings: { google: true, googleKey: 'test-key' }, google: translate,
+    settings: googleOn, google: translate,
     native: (message) => ({ available: true, results: message.blocks.map((b) => b.words.map(() => 'm')) })
   })
   await bg.gloss([{ text: 'Aš skaitau.', words: ['skaitau'] }, { text: 'Tu rašai.', words: ['rašai'] }])
@@ -314,25 +320,36 @@ test('with Google Translate on, each block goes to the model with its English tr
     body: { q: ['Aš skaitau.', 'Tu rašai.'], source: 'lt', target: 'en', format: 'text' }
   }])
   assert.deepEqual(bg.nativeCalls[0].blocks.map((b) => b.translation), ['EN: Aš skaitau.', 'EN: Tu rašai.'])
-  await bg.close()
 })
 
-test('with Google Translate off, or with no key, nothing goes to Google', async () => {
-  const cases = [[{ google: false, googleKey: 'test-key' }, 'Aš skaitau.'], [{ google: true, googleKey: '' }, 'Tu rašai.']]
-  for (const [settings, text] of cases) {
-    const bg = load({ settings, google: translate })
-    await bg.gloss([{ text, words: [text.split(' ')[1].replace('.', '')] }])
+for (const [name, settings] of [['off', { google: false, googleKey: 'test-key' }], ['on with no key', { google: true, googleKey: '' }]]) {
+  test(`with Google Translate ${name}, nothing goes to Google`, async () => {
+    const bg = load({ settings, google: translate, native: reply })
+    await bg.gloss([{ text: 'Aš skaitau.', words: ['skaitau'] }])
     assert.deepEqual(bg.googleCalls, [])
     assert.equal(bg.nativeCalls[0].blocks[0].translation, undefined)
-    await bg.close()
-  }
+  })
+}
+
+test('a block whose words all come from the cache is not sent to Google again', async () => {
+  const bg = load({ settings: googleOn, google: translate, native: reply })
+  await bg.gloss([{ text: 'Aš skaitau.', words: ['skaitau'] }])
+  const again = await bg.gloss([{ text: 'Aš skaitau.', words: ['skaitau'] }, { text: 'Tu rašai.', words: ['rašai'] }])
+  assert.deepEqual(again.results, [{ skaitau: 'G:skaitau' }, { rašai: 'G:rašai' }])
+  assert.deepEqual(bg.googleCalls.map((call) => call.body.q), [['Aš skaitau.'], ['Tu rašai.']])
 })
 
-test('a Google error leaves the blocks without a translation, and the model still runs', async () => {
-  const bg = load({ settings: { google: true, googleKey: 'bad-key' }, google: () => ({ status: 403, json: { error: { message: 'API key not valid' } } }) })
-  await bg.gloss([{ text: 'Aš skaitau.', words: ['skaitau'] }])
-  assert.equal(bg.googleCalls.length, 1)
-  assert.equal(bg.nativeCalls.length, 1)
-  assert.equal(bg.nativeCalls[0].blocks[0].translation, undefined)
-  await bg.close()
-})
+const googleFailures = [
+  ['an HTTP error', () => ({ status: 403, json: { error: { message: 'API key not valid' } } })],
+  ['no connection', () => new TypeError('Load failed')],
+  ['a reply with the wrong number of translations', () => ({ status: 200, json: { data: { translations: [] } } })]
+]
+for (const [name, google] of googleFailures) {
+  test(`after ${name} from Google, the blocks go to the model without a translation`, async () => {
+    const bg = load({ settings: googleOn, google, native: reply })
+    const result = await bg.gloss([{ text: 'Aš skaitau.', words: ['skaitau'] }])
+    assert.equal(bg.googleCalls.length, 1)
+    assert.deepEqual(result.results, [{ skaitau: 'G:skaitau' }])
+    assert.equal(bg.nativeCalls[0].blocks[0].translation, undefined)
+  })
+}

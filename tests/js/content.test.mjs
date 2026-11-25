@@ -33,8 +33,7 @@ test('a selected part of a word glosses only that word, with the whole sentence 
   assert.equal(page.glosses().length, 0)
 
   page.select('#p', 10, 17)
-  await waitFor(() => page.glosses().length === 1)
-  await page.settle()
+  await page.advance(500)
 
   assert.deepEqual(page.glosses(), [['senamiestis', 'G:senamiestis']])
   assert.deepEqual(page.sent, [[{ text: 'Vilniaus senamiestis yra gražus.', words: ['senamiestis'] }]])
@@ -46,11 +45,10 @@ test('a block whose model call failed is asked again once, after a pause', async
     gloss: (blocks, call) => blocks.map((b) =>
       call === 1 && b.text.startsWith('Vilniaus') ? null : Object.fromEntries(b.words.map((w) => [w, 'G:' + w])))
   })
-  await waitFor(() => page.glossCalls() === 1)
-  await new Promise((resolve) => setTimeout(resolve, 300))
+  await page.settle()
   assert.equal(page.glossCalls(), 1)
 
-  await page.settle()
+  await page.advance(1000)
   assert.equal(page.glossCalls(), 2)
   assert.deepEqual(page.sent[1], [{ text: 'Vilniaus senamiestis.', words: ['vilniaus', 'senamiestis'] }])
   assert.deepEqual(page.glosses().map(([word]) => word), ['Aš', 'skaitau', 'Vilniaus', 'senamiestis'])
@@ -60,19 +58,11 @@ test('a block that keeps failing is retried only once', async () => {
   const page = await loadContent(lt('<p id="b">Vilniaus senamiestis.</p>'), {
     gloss: (blocks) => blocks.map(() => null)
   })
-  await page.settle()
+  await page.advance(1000)
+  assert.equal(page.glossCalls(), 2)
+  await page.advance(1000)
   assert.equal(page.glossCalls(), 2)
   assert.equal(page.glosses().length, 0)
-})
-
-test('turning Lithuanify off gives back the original text', async () => {
-  const page = await loadContent(lt('<p id="p">Aš skaitau knygą apie <a href="#">Lietuvos istoriją</a>.</p>'))
-  await page.settle()
-  assert.ok(page.glosses().length > 0)
-
-  page.state('disable()')
-  assert.equal(page.glosses().length, 0)
-  assert.equal(page.document.querySelector('#p').innerHTML, 'Aš skaitau knygą apie <a href="#">Lietuvos istoriją</a>.')
 })
 
 test('hover mode glosses a paragraph again after its text changes', async () => {
@@ -106,18 +96,22 @@ test('an inflected form gets its dictionary meaning from one lookup, and the mod
 })
 
 test('a word whose lookup failed is asked again with the next batch', async () => {
-  const page = await loadContent(lt('<p>Knygą skaitau.</p>'), { lookupFailures: 1 })
+  const page = await loadContent(lt('<p>Knygą skaitau.</p>'), { lookupFailures: 1, modelAvailable: false })
   await page.settle()
   page.document.body.insertAdjacentHTML('beforeend', '<p id="n">Aš turiu knygą.</p>')
-  await waitFor(() => page.glosses().some(([word, gloss]) => word === 'knygą' && gloss === 'book'))
-  assert.ok(page.lookups.length >= 2)
+  await page.advance(1000)
+  assert.equal(page.lookups.length, 2)
   assert.ok(page.lookups[1].includes('knygą'))
-  await page.settle()
+  assert.deepEqual(page.glosses(), [['Knygą', 'book'], ['Aš', 'I'], ['knygą', 'book']])
 })
 
 test('a batch whose lookup failed waits and asks again before it renders', async () => {
   const page = await loadContent(lt('<p>Aš skaitau knygą.</p>'), { modelAvailable: false, lookupFailures: 1 })
   await page.settle()
+  assert.equal(page.lookups.length, 1)
+  assert.deepEqual(page.glosses(), [])
+
+  await page.advance(1000)
   assert.equal(page.lookups.length, 2)
   assert.deepEqual(page.glosses(), [['Aš', 'I'], ['knygą', 'book']])
 })
@@ -129,6 +123,7 @@ test('the page keeps at most 20000 looked-up words', async () => {
   const page = await loadContent(lt(html), { modelAvailable: false })
   await page.settle()
   assert.equal(new Set(words).size, 20050)
+  // A memory bound has no outside view, so this one test reads the page's word map.
   assert.ok(page.state('meanings.size') <= 20000)
 })
 
@@ -211,14 +206,15 @@ test('hiding common words leaves a common word bare and does not send it to the 
   assert.equal(page.glossCalls(), 0)
 })
 
-test('turning Lithuanify off in the popup gives back the original text in every open tab', async () => {
-  const page = await loadContent(lt('<p id="p">Aš skaitau knygą.</p>'))
+test('turning Lithuanify off in the popup gives back the original text, links included, in every open tab', async () => {
+  const original = 'Aš skaitau knygą apie <a href="#">Lietuvos istoriją</a>.'
+  const page = await loadContent(lt(`<p id="p">${original}</p>`))
   await page.settle()
   assert.ok(page.glosses().length > 0)
 
   page.changeSettings({ enabled: false })
   await waitFor(() => page.glosses().length === 0)
-  assert.equal(page.document.querySelector('#p').innerHTML, 'Aš skaitau knygą.')
+  assert.equal(page.document.querySelector('#p').innerHTML, original)
 
   page.changeSettings({ enabled: true })
   await waitFor(() => page.glosses().length > 0)
@@ -233,7 +229,9 @@ test('a new translate mode from the popup reaches a tab that is already open', a
   page.changeSettings({ mode: 'select' })
   await waitFor(() => page.glosses().length === 0)
   await page.settle()
-  assert.equal(page.state('mode'), 'select')
+  page.select('#p', 3, 10)
+  await page.advance(500)
+  assert.deepEqual(page.glosses(), [['skaitau', 'G:skaitau']])
 })
 
 test('a page whose Lithuanian text arrives after load still gets glosses', async () => {
@@ -243,8 +241,8 @@ test('a page whose Lithuanian text arrives after load still gets glosses', async
 
   page.document.querySelector('#app').innerHTML =
     '<p>Aš skaitau knygą apie Lietuvos istoriją ir labai ją mėgstu.</p>'
-  await waitFor(() => page.glosses().some(([word]) => word === 'knygą'))
-  await page.settle()
+  await page.advance(500)
+  assert.ok(page.glosses().some(([word]) => word === 'knygą'))
 })
 
 test('a page with plenty of English text is left alone even when more text arrives', async () => {
@@ -252,8 +250,9 @@ test('a page with plenty of English text is left alone even when more text arriv
   const page = await loadContent(`<!doctype html><html><body><p>${english}</p></body></html>`)
   await page.settle()
   page.document.body.insertAdjacentHTML('beforeend', '<p>Aš skaitau knygą ir labai ją mėgstu.</p>')
-  await new Promise((resolve) => setTimeout(resolve, 800))
+  await page.advance(500)
   assert.equal(page.glosses().length, 0)
+  assert.equal(page.lookups.length, 0)
 })
 
 test('an approximate meaning shows at once and goes to the model with its lemma to confirm or replace', async () => {
