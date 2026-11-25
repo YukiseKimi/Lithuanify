@@ -83,6 +83,22 @@
         "message": "Sends each paragraph the on-device AI glosses to Google, so the AI can pick better meanings. Needs the on-device AI and your own Cloud Translation API key.",
         "description": "Popup: what turning on Google Translate does, and what it needs."
     },
+    "popup_google_offline_title": {
+        "message": "No internet connection",
+        "description": "Popup: title of the warning shown when Google Translate is turned on while the device is offline."
+    },
+    "popup_google_offline": {
+        "message": "Google Translate works only with Wi-Fi or mobile data. Until you are online, Lithuanify uses the dictionary and the on-device AI.",
+        "description": "Popup: the offline warning's text."
+    },
+    "popup_google_offline_note": {
+        "message": "No internet connection: Google Translate is paused.",
+        "description": "Popup: note under the Google Translate key while the device is offline."
+    },
+    "popup_ok": {
+        "message": "OK",
+        "description": "Popup: button that closes a warning."
+    },
     "popup_google_needs_ai": {
         "message": "Google Translate needs the on-device AI: it gives the AI an English sentence to read.",
         "description": "Popup: why the Google Translate switch is greyed out while the on-device AI is off or unavailable."

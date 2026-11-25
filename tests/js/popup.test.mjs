@@ -11,10 +11,14 @@ const open = new Set()
 afterEach(() => { for (const window of open) window.close(); open.clear() })
 
 // The toolbar popup in jsdom, over a storage.local that holds `stored`.
-async function loadPopup(stored, { modelAvailable = true } = {}) {
+async function loadPopup(stored, { modelAvailable = true, online = true } = {}) {
   const dom = new JSDOM(html, { runScripts: 'dangerously' })
   const { window } = dom
   open.add(window)
+  const connection = { online }
+  Object.defineProperty(window.navigator, 'onLine', { get: () => connection.online })
+  // jsdom has <dialog> but no showModal.
+  window.HTMLDialogElement.prototype.showModal = function () { this.open = true }
   const created = []
   window.close = () => {}
   window.browser = {
@@ -30,7 +34,8 @@ async function loadPopup(stored, { modelAvailable = true } = {}) {
   el.textContent = script
   window.document.body.append(el)
   await new Promise((resolve) => setTimeout(resolve, 20))
-  return { window, document: window.document, created }
+  const setOnline = (value) => { connection.online = value; window.dispatchEvent(new window.Event(value ? 'online' : 'offline')) }
+  return { window, document: window.document, created, setOnline }
 }
 
 test('the popup links to the Saved words page with the number of saved words', async () => {
@@ -89,4 +94,34 @@ test('Google Translate needs the on-device AI: off or unavailable, the switch is
   const noModel = await loadPopup({ google: true, googleKey: 'k' }, { modelAvailable: false })
   assert.equal(noModel.document.getElementById('google').disabled, true)
   assert.equal(noModel.document.getElementById('google-needs-ai').hidden, false)
+})
+
+test('turning on Google Translate offline warns that it needs the internet, and keeps the setting', async () => {
+  const stored = { mode: 'page' }
+  const popup = await loadPopup(stored, { online: false })
+  const dialog = popup.document.getElementById('google-offline')
+  const note = popup.document.getElementById('google-offline-note')
+  assert.equal(dialog.open, false)
+
+  const google = popup.document.getElementById('google')
+  google.checked = true
+  google.dispatchEvent(new popup.window.Event('change'))
+  assert.equal(dialog.open, true)
+  assert.equal(stored.google, true)
+  assert.equal(note.hidden, false)
+
+  popup.setOnline(true)
+  assert.equal(note.hidden, true)
+})
+
+test('online, turning on Google Translate shows no warning', async () => {
+  const popup = await loadPopup({ mode: 'page' })
+  const google = popup.document.getElementById('google')
+  google.checked = true
+  google.dispatchEvent(new popup.window.Event('change'))
+  assert.equal(popup.document.getElementById('google-offline').open, false)
+  assert.equal(popup.document.getElementById('google-offline-note').hidden, true)
+
+  popup.setOnline(false)
+  assert.equal(popup.document.getElementById('google-offline-note').hidden, false)
 })

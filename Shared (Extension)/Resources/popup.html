@@ -30,7 +30,15 @@
     <div id="google-details" class="google-details" hidden>
         <p class="hint" data-i18n="popup_google_note">Sends each paragraph the on-device AI glosses to Google, so the AI can pick better meanings. Needs the on-device AI and your own Cloud Translation API key.</p>
         <input id="google-key" class="google-key" type="password" autocomplete="off" spellcheck="false" placeholder="Cloud Translation API key" aria-label="Cloud Translation API key">
+        <p id="google-offline-note" class="status warn" data-i18n="popup_google_offline_note" hidden>No internet connection: Google Translate is paused.</p>
     </div>
+    <dialog id="google-offline" class="offline-dialog" aria-labelledby="google-offline-title">
+        <form method="dialog">
+            <p id="google-offline-title" class="offline-title" data-i18n="popup_google_offline_title">No internet connection</p>
+            <p class="offline-text" data-i18n="popup_google_offline">Google Translate works only with Wi-Fi or mobile data. Until you are online, Lithuanify uses the dictionary and the on-device AI.</p>
+            <button value="ok" data-i18n="popup_ok">OK</button>
+        </form>
+    </dialog>
 
     <label class="mode-row">
         <span class="row-label" data-i18n="popup_translate">Translate</span>
