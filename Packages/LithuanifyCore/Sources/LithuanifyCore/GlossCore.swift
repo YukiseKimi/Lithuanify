@@ -21,11 +21,15 @@ public struct GlossBlock: Sendable, Equatable {
     public let text: String
     public let words: [String]
     public let hints: [WordHint?]
+    /// A machine translation of `text` into English (Google Translate, when the
+    /// reader turned it on). The model reads it as context, not as the answer.
+    public let translation: String?
 
-    public init(text: String, words: [String], hints: [WordHint?] = []) {
+    public init(text: String, words: [String], hints: [WordHint?] = [], translation: String? = nil) {
         self.text = text
         self.words = words
         self.hints = words.indices.map { hints.indices.contains($0) ? hints[$0] : nil }
+        self.translation = translation
     }
 
     public static func list(from message: Any?) -> [GlossBlock] {
@@ -35,7 +39,8 @@ public struct GlossBlock: Sendable, Equatable {
             return GlossBlock(
                 text: item?["text"] as? String ?? "",
                 words: item?["words"] as? [String] ?? [],
-                hints: (item?["hints"] as? [Any] ?? []).map(WordHint.init(message:))
+                hints: (item?["hints"] as? [Any] ?? []).map(WordHint.init(message:)),
+                translation: (item?["translation"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             )
         }
     }
@@ -70,7 +75,9 @@ public enum GlossCore {
     text and a numbered list of words from it. For each numbered word, give a \
     short English meaning (1-3 words) that fits how the word is used in the \
     text. When a word lists options, give the number of the option that fits \
-    the text; give 0 when none fits. Never repeat the Lithuanian word.
+    the text; give 0 when none fits. When an English translation of the text \
+    is given, use it to find the meaning that fits. Never repeat the \
+    Lithuanian word.
     """
 
     public static let maxWordsPerJob = 20
@@ -88,10 +95,17 @@ public enum GlossCore {
         public var context: [String] = []
         public var contextWords = 0
         public var targets: [Target] = []
+        /// The English translation of each block this job takes a sentence from, once each.
+        public var translations: [String] = []
+        var translatedBlocks: [Int] = []
     }
 
     public static func prompt(for job: Job) -> String {
-        var prompt = "Text:\n\(job.context.joined(separator: " "))\n\nWords:\n"
+        var prompt = "Text:\n\(job.context.joined(separator: " "))\n\n"
+        if !job.translations.isEmpty {
+            prompt += "English translation (machine, may be loose):\n\(job.translations.joined(separator: " "))\n\n"
+        }
+        prompt += "Words:\n"
         for (n, target) in job.targets.enumerated() {
             prompt += "\(n + 1). \(target.text)"
             if let hint = target.hint {
@@ -196,6 +210,10 @@ public enum GlossCore {
                         flush()
                     }
                     current.context.append(sentence.trimmingCharacters(in: .whitespacesAndNewlines))
+                    if let translation = block.translation, !current.translatedBlocks.contains(b) {
+                        current.translations.append(translation)
+                        current.translatedBlocks.append(b)
+                    }
                     current.contextWords += wordCount
                     current.targets.append(contentsOf: slice)
                     start += slice.count

@@ -187,6 +187,54 @@ function sentenceOf(text, word) {
     return (found || text).trim();
 }
 
+// --- Google Translate (opt-in) -----------------------------------------------
+// Off by default. When the reader turns it on and gives an API key in the
+// popup, each block that goes to the model is translated into English first,
+// and the model reads the translation as context. The text of those blocks
+// goes to Google; nothing else does. Any error leaves the blocks as they were.
+
+const GOOGLE_URL = "https://translation.googleapis.com/language/translate/v2";
+
+async function googleKey() {
+    try {
+        const { google, googleKey: key } = await browser.storage.local.get(["google", "googleKey"]);
+        return google === true && typeof key === "string" && key.trim() ? key.trim() : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+// Returns one English string per text, or null when Google gave none.
+async function translateAll(texts, key) {
+    try {
+        const response = await fetch(GOOGLE_URL, {
+            method: "POST",
+            // The key goes in a header, so it never shows in a URL or a log of one.
+            headers: { "Content-Type": "application/json", "X-Goog-Api-Key": key },
+            body: JSON.stringify({ q: texts, source: "lt", target: "en", format: "text" })
+        });
+        if (!response.ok) {
+            console.warn(`[Lithuanify] Google Translate: HTTP ${response.status}`);
+            return null;
+        }
+        const data = await response.json();
+        const translations = data && data.data && data.data.translations;
+        if (!Array.isArray(translations) || translations.length !== texts.length) return null;
+        return translations.map((t) => (t && typeof t.translatedText === "string" ? t.translatedText : ""));
+    } catch (e) {
+        console.warn("[Lithuanify] Google Translate failed", e);
+        return null;
+    }
+}
+
+async function withTranslations(requests) {
+    const key = await googleKey();
+    if (!key || !requests.length) return requests;
+    const english = await translateAll(requests.map((r) => r.text), key);
+    if (!english) return requests;
+    return requests.map((r, i) => (english[i] ? { ...r, translation: english[i] } : r));
+}
+
 const PAUSE_MS = 60 * 1000;
 let pausedUntil = 0;
 
@@ -223,7 +271,7 @@ async function handleGloss(blocks) {
         try {
             resp = await browser.runtime.sendNativeMessage(NATIVE_APP_ID, {
                 command: "gloss",
-                blocks: entries.map((e) => e.request)
+                blocks: await withTranslations(entries.map((e) => e.request))
             });
         } catch (e) {
             resp = null;
@@ -356,9 +404,36 @@ function prefixedMeaning(meanings, word) {
     return null;
 }
 
+// A reflexive verb puts -si- after its prefix or after ne-: pa-si-kalbėti,
+// ne-si-jaudink. Its meaning can drift far from the plain verb (susitikti
+// "meet", tikti "suit"), so the plain verb's meaning is a hint for the
+// model only: `hintOnly` entries never show as a gloss on their own.
+const REFLEXIVE_PREFIXES = [...VERB_PREFIXES.filter((p) => p !== "api" && p !== "ati").map((p) => p + "si"), "nesi"];
+
+function reflexiveMeaning(meanings, word) {
+    for (const prefix of REFLEXIVE_PREFIXES) {
+        if (!word.startsWith(prefix) || word.length < prefix.length + MIN_STEM) continue;
+        const base = entryOf(meanings, word.slice(prefix.length));
+        if (!base || !base.ne) continue;
+        const hint = { m: base.m, r: 0, approx: true, from: base.l, hintOnly: true };
+        if (prefix === "nesi") return negated({ ...hint, l: base.l && base.l + "s" });
+        return { ...hint, l: base.l && prefix + base.l };
+    }
+    return null;
+}
+
 const negated = (entry) => ({ ...entry, m: entry.m.map((meaning) => "not " + meaning) });
 
+// ne- merges with the forms of būti that start with a vowel: ne + esu is
+// nesu, ne + yra is nėra. These come before any other lookup: spelled
+// without its marks, nesu would otherwise read as nešu ("I carry").
+const NEGATED_BE = { nesu: "esu", nesi: "esi", nesame: "esame", nesate: "esate", nesam: "esam", nesat: "esat", nėra: "yra" };
+
 function meaningOf(meanings, word) {
+    if (NEGATED_BE[word]) {
+        const be = entryOf(meanings, NEGATED_BE[word]);
+        if (be) return negated({ m: be.m, l: be.l || "būti", r: 0 });
+    }
     const entry = entryOf(meanings, word);
     if (entry) return { m: entry.m, l: entry.l, r: entry.r };
     for (const prefix of NEGATIONS) {
@@ -371,7 +446,7 @@ function meaningOf(meanings, word) {
         if (base && (base.ne || prefixed)) return negated({ m: base.m, l: base.l, r: 0 });
         if (!base && prefixed) return negated(prefixed);
     }
-    return prefixedMeaning(meanings, word);
+    return prefixedMeaning(meanings, word) || reflexiveMeaning(meanings, word);
 }
 
 async function handleLookup(words) {

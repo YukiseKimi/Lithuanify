@@ -7,6 +7,11 @@ const smart = document.getElementById("smart");
 const modelStatus = document.getElementById("model-status");
 const mode = document.getElementById("mode");
 const hideCommon = document.getElementById("hide-common");
+const google = document.getElementById("google");
+const googleDetails = document.getElementById("google-details");
+const googleKey = document.getElementById("google-key");
+const googleNeedsAi = document.getElementById("google-needs-ai");
+let modelReady = null;  // the on-device model's availability, once the background answers
 
 const t = (key, fallback) => browser.i18n.getMessage(key) || fallback;
 
@@ -20,18 +25,33 @@ function renderEnabled(enabled) {
     smart.disabled = !enabled;
     mode.disabled = !enabled;
     hideCommon.disabled = !enabled;
+    renderGoogle();
 }
 
-browser.storage.local.get(["enabled", "smart", "mode", "hideCommon"]).then((result) => {
-    renderEnabled(result.enabled !== false);
+// Google Translate only gives the on-device AI an English sentence to read,
+// so it works only while that AI is on and available. Otherwise its switch
+// is greyed out and says why; its own setting stays as the reader left it.
+function renderGoogle() {
+    const aiOn = smart.checked && modelReady !== false;
+    google.disabled = !toggle.checked || !aiOn;
+    googleNeedsAi.hidden = aiOn;
+    googleDetails.hidden = !(google.checked && aiOn);
+}
+
+browser.storage.local.get(["enabled", "smart", "mode", "hideCommon", "google", "googleKey"]).then((result) => {
+    google.checked = result.google === true;
+    googleKey.value = typeof result.googleKey === "string" ? result.googleKey : "";
     smart.checked = result.smart !== false;
+    renderEnabled(result.enabled !== false);
     mode.value = result.mode || "page";
     hideCommon.value = String(Number(result.hideCommon) || 0);
 });
 
 // Show on-device model availability.
 browser.runtime.sendMessage({ command: "modelStatus" }).then((res) => {
-    if (res && res.available) {
+    modelReady = !!(res && res.available);
+    renderGoogle();
+    if (modelReady) {
         modelStatus.textContent = t("popup_ai_available", "On-device AI: available");
         modelStatus.classList.add("ok");
     } else {
@@ -54,7 +74,19 @@ hideCommon.addEventListener("change", () => {
     browser.storage.local.set({ hideCommon: Number(hideCommon.value) || 0 });
 });
 
+// Google Translate is off until the reader turns it on; the key stays in
+// this extension's storage.local and goes only to Google, in a header.
+google.addEventListener("change", () => {
+    renderGoogle();
+    browser.storage.local.set({ google: google.checked });
+});
+
+googleKey.addEventListener("change", () => {
+    browser.storage.local.set({ googleKey: googleKey.value.trim() });
+});
+
 smart.addEventListener("change", () => {
+    renderGoogle();
     browser.storage.local.set({ smart: smart.checked });
 });
 

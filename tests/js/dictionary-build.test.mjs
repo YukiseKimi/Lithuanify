@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { expandHunspell, parseAffixes, readFrequency, readWiktionary, shortGloss, writeDictionary } from '../../scripts/build-dictionary.mjs'
+import { addTranslated, expandHunspell, parseAffixes, readFrequency, readWiktionary, shortGloss, translationsOf, writeDictionary } from '../../scripts/build-dictionary.mjs'
 
 const fixture = (name) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8')
 
@@ -64,4 +64,34 @@ test('a form with a stressed i keeps its word: the dot Wiktionary puts over a st
     forms: [{ form: 'gi̇̀msta', tags: ['present', 'third-person'] }, { form: 'gi̇̀mė', tags: ['past', 'third-person'] }]
   })])
   assert.deepEqual([...lemmas.get('gimti').forms].sort(), ['gimsta', 'gimė'])
+})
+
+test('an English entry gives its Lithuanian translations, with the English headword as the meaning', () => {
+  const entry = {
+    word: 'heritage', lang_code: 'en', pos: 'noun',
+    translations: [
+      { lang_code: 'lt', word: 'pa\u0303veldas', sense: 'property' },
+      { lang_code: 'lv', word: 'mantojums' },
+      { lang_code: 'lt', word: 'kultūros paveldas' }
+    ],
+    senses: [{ glosses: ['x'], translations: [{ lang_code: 'lt', word: 'palikimas' }] }]
+  }
+  assert.deepEqual(translationsOf(entry), [['paveldas', 'heritage'], ['palikimas', 'heritage']])
+  assert.deepEqual(translationsOf({ ...entry, lang_code: 'fr' }), [])
+  assert.deepEqual(translationsOf({ ...entry, pos: 'name' }), [])
+  assert.deepEqual(translationsOf({ ...entry, word: 'a very long English headword' }), [])
+})
+
+test('a translation adds a lemma only where Lithuanian Wiktionary has none and Hunspell knows the word', () => {
+  const lemmas = new Map([['knyga', { meanings: ['book'], forms: new Set() }]])
+  const heads = new Set(['knyga', 'paveldas', 'palikimas'])
+  const added = addTranslated(lemmas, [
+    ['knyga', 'volume'], ['paveldas', 'legacy'], ['paveldas', 'heritage'], ['paveldas', 'heritage'],
+    ['nemokama', 'free'], ['palikimas', 'legacy']
+  ], heads)
+  assert.equal(added, 2)
+  assert.deepEqual(lemmas.get('knyga').meanings, ['book'])
+  assert.deepEqual(lemmas.get('paveldas').meanings, ['heritage', 'legacy'])
+  assert.deepEqual(lemmas.get('palikimas').meanings, ['legacy'])
+  assert.equal(lemmas.has('nemokama'), false)
 })

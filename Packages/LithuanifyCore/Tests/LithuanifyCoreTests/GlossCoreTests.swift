@@ -45,6 +45,14 @@ struct BlockListTests {
         ])
     }
 
+    @Test func aBlockCarriesItsEnglishTranslationWhenTheMessageHasOne() {
+        let blocks = GlossBlock.list(from: [
+            ["text": "Aš skaitau.", "words": ["skaitau"], "translation": "I am reading."],
+            ["text": "Labas.", "words": ["labas"]],
+        ] as [Any])
+        #expect(blocks.map(\.translation) == ["I am reading.", nil])
+    }
+
     @Test func missingBlocksGiveAnEmptyList() {
         #expect(GlossBlock.list(from: nil).isEmpty)
     }
@@ -84,6 +92,26 @@ struct JobTests {
             GlossBlock(text: "Aš skaitau knygą.", words: ["skaitau", "knygą"])
         ]).first)
         #expect(GlossCore.prompt(for: job) == "Text:\nAš skaitau knygą.\n\nWords:\n1. skaitau\n2. knygą\n")
+    }
+
+    @Test func promptGivesTheEnglishTranslationOfEachBlockOnce() throws {
+        let job = try #require(GlossCore.makeJobs([
+            GlossBlock(text: "Aš skaitau. Tu rašai.", words: ["skaitau", "rašai"], translation: "I am reading. You are writing."),
+            GlossBlock(text: "Labas.", words: ["labas"]),
+        ]).first)
+        #expect(GlossCore.prompt(for: job) == """
+        Text:
+        Aš skaitau. Tu rašai. Labas.
+
+        English translation (machine, may be loose):
+        I am reading. You are writing.
+
+        Words:
+        1. skaitau
+        2. rašai
+        3. labas
+
+        """)
     }
 
     @Test func promptListsTheLemmaAndOptionsOfAWordToPick() throws {

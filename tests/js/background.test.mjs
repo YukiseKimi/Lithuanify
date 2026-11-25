@@ -207,6 +207,24 @@ test('a negated verb the dictionary knows with its prefix keeps its own meaning,
   assert.deepEqual(await bg.lookup(['nesuprantu']), { nesuprantu: { m: ['not understand'], l: 'suprasti', r: 0 } })
 })
 
+test('nesu, nesi, nėra and the other merged ne- forms of būti mean "not be", not a word spelled like them', async () => {
+  const bg = load({ dictionary: 'be\tbūti\tesu esi yra esame esate\tne\ncarry\tnešti\tnešu neši\tne\n' })
+  const found = await bg.lookup(['nesu', 'nesi', 'nėra', 'nesame', 'nesate', 'nešu'])
+  assert.deepEqual(firsts(found), {
+    nesu: 'not be', nesi: 'not be', nėra: 'not be', nesame: 'not be', nesate: 'not be', nešu: 'carry'
+  })
+  assert.equal(found.nėra.l, 'būti')
+})
+
+test('a reflexive verb with a prefix gets the plain verb as a hint only, for the model', async () => {
+  const bg = load({ dictionary: 'speak\tkalbėti\tkalba kalbėjo\tne\nmeet up\tsusitikti\tsusitiko\n' })
+  assert.deepEqual(await bg.lookup(['pasikalbėti', 'nesikalba', 'susitiko']), {
+    pasikalbėti: { m: ['speak'], l: 'pasikalbėti', r: 0, approx: true, from: 'kalbėti', hintOnly: true },
+    nesikalba: { m: ['not speak'], l: 'kalbėtis', r: 0, approx: true, from: 'kalbėti', hintOnly: true },
+    susitiko: { m: ['meet up'], l: 'susitikti', r: 0 }
+  })
+})
+
 test('a word that starts with nebe but negates with ne still gets "not"', async () => {
   const bg = load({ dictionary: sample })
   assert.deepEqual(firsts(await bg.lookup(['nebendras'])), { nebendras: 'not common' })
@@ -281,4 +299,40 @@ test('a lookup gives the frequency rank of a word', async () => {
   const bg = load({ dictionary: 'and\tir\t\t\t1\nbook\tknyga\tknygą\tne\t40\nfire\tgaisras\tgaisro\n' })
   const found = await bg.lookup(['ir', 'knygą', 'gaisro'])
   assert.deepEqual([found.ir.r, found.knygą.r, found.gaisro.r], [1, 40, 0])
+})
+
+const translate = (body) => ({ status: 200, json: { data: { translations: body.q.map((text) => ({ translatedText: 'EN: ' + text })) } } })
+
+test('with Google Translate on, each block goes to the model with its English translation', async () => {
+  const bg = load({
+    settings: { google: true, googleKey: 'test-key' }, google: translate,
+    native: (message) => ({ available: true, results: message.blocks.map((b) => b.words.map(() => 'm')) })
+  })
+  await bg.gloss([{ text: 'Aš skaitau.', words: ['skaitau'] }, { text: 'Tu rašai.', words: ['rašai'] }])
+  assert.deepEqual(bg.googleCalls, [{
+    url: 'https://translation.googleapis.com/language/translate/v2', key: 'test-key',
+    body: { q: ['Aš skaitau.', 'Tu rašai.'], source: 'lt', target: 'en', format: 'text' }
+  }])
+  assert.deepEqual(bg.nativeCalls[0].blocks.map((b) => b.translation), ['EN: Aš skaitau.', 'EN: Tu rašai.'])
+  await bg.close()
+})
+
+test('with Google Translate off, or with no key, nothing goes to Google', async () => {
+  const cases = [[{ google: false, googleKey: 'test-key' }, 'Aš skaitau.'], [{ google: true, googleKey: '' }, 'Tu rašai.']]
+  for (const [settings, text] of cases) {
+    const bg = load({ settings, google: translate })
+    await bg.gloss([{ text, words: [text.split(' ')[1].replace('.', '')] }])
+    assert.deepEqual(bg.googleCalls, [])
+    assert.equal(bg.nativeCalls[0].blocks[0].translation, undefined)
+    await bg.close()
+  }
+})
+
+test('a Google error leaves the blocks without a translation, and the model still runs', async () => {
+  const bg = load({ settings: { google: true, googleKey: 'bad-key' }, google: () => ({ status: 403, json: { error: { message: 'API key not valid' } } }) })
+  await bg.gloss([{ text: 'Aš skaitau.', words: ['skaitau'] }])
+  assert.equal(bg.googleCalls.length, 1)
+  assert.equal(bg.nativeCalls.length, 1)
+  assert.equal(bg.nativeCalls[0].blocks[0].translation, undefined)
+  await bg.close()
 })

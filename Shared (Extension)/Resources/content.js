@@ -80,14 +80,36 @@ function entryFor(word) {
     return meanings.get(phraseKey(word)) || null;
 }
 
+// Words the reader marked as known ("known:<lemma>" keys in storage.local).
+const KNOWN_PREFIX = "known:";
+let knownKeys = new Set();
+
+const knownKeyOf = (entry, lower) => KNOWN_PREFIX + ((entry && entry.l) || lower);
+
+async function readKnown() {
+    try {
+        const stored = await browser.storage.local.get(null);
+        return new Set(Object.keys(stored).filter((key) => key.startsWith(KNOWN_PREFIX) && stored[key]));
+    } catch (e) {
+        return new Set();
+    }
+}
+
+// A hidden word gets no gloss and is not sent to the model: a common word
+// under Hide common words, or a word the reader marked as known.
 function isHidden(word) {
     const entry = entryFor(word);
-    return !!entry && entry.r > 0 && entry.r <= hideCommon;
+    if (entry && entry.r > 0 && entry.r <= hideCommon) return true;
+    return knownKeys.size > 0 && knownKeys.has(knownKeyOf(entry, phraseKey(word)));
 }
+
+// A meaning the page can show. A hint-only entry (a reflexive verb read as its
+// plain verb) is for the model, never a gloss of its own.
+const showable = (entry) => !!entry && !entry.hintOnly;
 
 function dictLookup(word) {
     const entry = entryFor(word);
-    return entry ? entry.m[0] : null;
+    return showable(entry) ? entry.m[0] : null;
 }
 
 // The model picks among several meanings, and confirms or replaces an
@@ -170,7 +192,7 @@ function aiActive() {
 // read as its plain verb), or the on-device model.
 function glossInfoFor(token, gloss, context) {
     const entry = entryFor(token);
-    const fromDictionary = !!entry && entry.m[0] === gloss;
+    const fromDictionary = showable(entry) && entry.m[0] === gloss;
     return {
         word: token,
         lower: token.toLowerCase(),
@@ -180,12 +202,19 @@ function glossInfoFor(token, gloss, context) {
     };
 }
 
+// WebKit on iPhone moves a tap onto the nearest element that listens for
+// clicks; next to a link, the link won over a gloss, whose only listener was
+// the document's. A listener on the gloss itself makes it a tap target of its
+// own. The document's capture listener (onGlossTap) does the work.
+const markTappable = () => {};
+
 function makeRuby(token, gloss, info) {
     const ruby = document.createElement("ruby");
     ruby.className = ANNOTATION_CLASS;
     ruby.appendChild(document.createTextNode(token));
     const rt = document.createElement("rt");
     rt.textContent = gloss;
+    rt.addEventListener("click", markTappable);
     ruby.appendChild(rt);
     glossInfo.set(ruby, info);
     return ruby;
@@ -262,10 +291,14 @@ function renderBlock(node) {
             unknown.push(lower);
         }
     });
-    const hints = unknown.map((w) => (picks.has(w) ? { lemma: entryFor(w).l, options: entryFor(w).m } : null));
+    const hintFor = (w) => {
+        const entry = entryFor(w);
+        return picks.has(w) || (entry && entry.hintOnly) ? { lemma: entry.l, options: entry.m } : null;
+    };
+    const hints = unknown.map(hintFor);
 
     const record = { node, text, context: contextOf.get(node) || text, unknown, parts: null };
-    if (picks.size) record.hints = hints;
+    if (hints.some(Boolean)) record.hints = hints;
     if (glosses.some(Boolean)) {
         record.parts = splitNode(node, tokens, glosses, picks);
     } else {
@@ -678,7 +711,8 @@ const CARD_CSS = `
 .rank { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; }
 .save { margin-left: auto; font: 600 12px/1.4 inherit; color: var(--accent); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; cursor: pointer; }
 .save[aria-pressed="true"] { color: var(--saved); border-color: var(--saved); }
-.save:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.know { font: 600 12px/1.4 inherit; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; cursor: pointer; }
+.save:focus-visible, .know:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .meanings { margin: 0; padding: 8px 12px 8px 30px; }
 .meanings li.shown { font-weight: 650; color: var(--accent); }
 .foot { display: flex; justify-content: space-between; gap: 12px; padding: 7px 12px; border-top: 1px solid var(--line); background: var(--foot); border-radius: 0 0 10px 10px; color: var(--muted); font-size: 11px; }
@@ -723,7 +757,7 @@ function rankLabel(entry) {
 function sourceLine(info, shown) {
     const entry = info.entry;
     if (info.source === "model") {
-        const n = entry ? entry.m.indexOf(shown) + 1 : 0;
+        const n = showable(entry) ? entry.m.indexOf(shown) + 1 : 0;
         return n ? `On-device AI picked meaning ${n}` : "On-device AI meaning";
     }
     if (info.source === "approximate") {
@@ -806,14 +840,23 @@ function openCard(ruby, info) {
             save.textContent = "Not saved";
         }
     });
-    head.append(save);
+    const know = element("button", "know", "Know it");
+    know.type = "button";
+    know.title = "Hide the glosses of this word on every page";
+    know.addEventListener("click", () => {
+        const key = knownKeyOf(entry, info.lower);
+        browser.storage.local.set({ [key]: { word: info.lower, lemma: entry ? entry.l : null, knownAt: Date.now() } })
+            .catch(() => { know.textContent = "Not saved"; });
+        closeCard();
+    });
+    head.append(save, know);
     const key = savedKey(info);
     openSaved = { key, button: save };
     browser.storage.local.get(key).then((stored) => {
         if (openSaved && openSaved.button === save) showSaved(save, !!stored[key]);
     }, () => {});
 
-    const meanings = entry ? [...entry.m] : [];
+    const meanings = showable(entry) ? [...entry.m] : [];
     if (!meanings.includes(shown)) meanings.unshift(shown);
     const list = element("ol", "meanings");
     for (const meaning of meanings) list.append(element("li", meaning === shown ? "shown" : "", meaning));
@@ -840,6 +883,37 @@ function closeCard() {
     openSaved = null;
     if (cardHost) cardHost.hidden = true;
 }
+
+// Takes the glosses of a newly known word off the page, leaving its text.
+function unwrapKnown(key) {
+    document.querySelectorAll(`ruby.${ANNOTATION_CLASS}`).forEach((ruby) => {
+        const info = glossInfo.get(ruby);
+        if (!info || knownKeyOf(info.entry, info.lower) !== key) return;
+        const text = document.createTextNode(info.word);
+        ownNodes.add(text);
+        ruby.replaceWith(text);
+    });
+}
+
+// A word known in any tab loses its glosses here at once. A word forgotten
+// gets them back through a fresh scan, the way a changed setting does.
+browser.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local") return;
+    let forgotten = false;
+    for (const [key, change] of Object.entries(changes)) {
+        if (!key.startsWith(KNOWN_PREFIX)) continue;
+        if (change.newValue) {
+            knownKeys.add(key);
+            unwrapKnown(key);
+        } else if (knownKeys.delete(key)) {
+            forgotten = true;
+        }
+    }
+    if (forgotten && enabled) {
+        disable();
+        enable();
+    }
+});
 
 // The open card's saved-word key and its button, so that a save or a removal
 // in another tab (or another card) shows on it at once.
@@ -1132,6 +1206,7 @@ async function enable() {
 
 async function start() {
     injectStyles();
+    knownKeys = await readKnown();
     document.addEventListener("click", onGlossTap, true);
     const gen = generation;
     if (smartEnabled) {

@@ -1,10 +1,14 @@
 #!/usr/bin/env node
-import { createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { createInterface } from 'node:readline'
+import { createGunzip } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 
 const SOURCES = {
   wiktionary: 'https://kaikki.org/dictionary/Lithuanian/kaikki.org-dictionary-Lithuanian.jsonl',
+  english: 'https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl.gz',
   dic: 'https://raw.githubusercontent.com/LibreOffice/dictionaries/master/lt_LT/lt.dic',
   aff: 'https://raw.githubusercontent.com/LibreOffice/dictionaries/master/lt_LT/lt.aff',
   copying: 'https://raw.githubusercontent.com/LibreOffice/dictionaries/master/lt_LT/COPYING',
@@ -74,6 +78,59 @@ export function readWiktionary(lines) {
     if (target && form !== lemma) target.forms.add(form)
   }
   return lemmas
+}
+
+// English Wiktionary's translation tables name Lithuanian words that have no
+// Lithuanian entry of their own (heritage → paveldas). Each pair is
+// [Lithuanian word, English headword]; the English headword is the meaning.
+export function translationsOf(entry) {
+  if (entry.lang_code !== 'en' || SKIPPED_POS.has(entry.pos)) return []
+  const english = (entry.word || '').trim()
+  if (!english || english.split(/\s+/).length > MAX_GLOSS_WORDS || !/^[A-Za-z][A-Za-z' -]*$/.test(english)) return []
+  const tables = [entry.translations || [], ...(entry.senses || []).map((sense) => sense.translations || [])]
+  const pairs = []
+  for (const table of tables) {
+    for (const t of table) {
+      if (t.lang_code !== 'lt' && t.code !== 'lt') continue
+      const word = withoutStress((t.word || '').toLowerCase().trim())
+      if (isWord(word)) pairs.push([word, english])
+    }
+  }
+  return pairs
+}
+
+// Adds a lemma for each translated word that Lithuanian Wiktionary lacks and
+// Hunspell lists as a headword (so it is a base form, with forms of its own).
+// Its meanings are the English words that name it most often. Returns how
+// many lemmas it added.
+export function addTranslated(lemmas, pairs, heads) {
+  const counts = new Map()
+  for (const [word, english] of pairs) {
+    if (lemmas.has(word) || !heads.has(word)) continue
+    const byEnglish = counts.get(word) || new Map()
+    byEnglish.set(english, (byEnglish.get(english) || 0) + 1)
+    counts.set(word, byEnglish)
+  }
+  for (const [word, byEnglish] of counts) {
+    const meanings = [...byEnglish]
+      .sort(([a, n], [b, m]) => m - n || a.length - b.length || a.localeCompare(b))
+      .slice(0, MAX_MEANINGS)
+      .map(([english]) => english)
+    lemmas.set(word, { meanings, forms: new Set() })
+  }
+  return counts.size
+}
+
+// Streams the gzipped English dump (about 3.4 GB of JSON lines) and parses
+// only the lines that hold a Lithuanian translation.
+async function readTranslations(path) {
+  const pairs = []
+  const lines = createInterface({ input: createReadStream(path).pipe(createGunzip()), crlfDelay: Infinity })
+  for await (const line of lines) {
+    if (!line.includes('"lang_code": "lt"')) continue
+    pairs.push(...translationsOf(JSON.parse(line)))
+  }
+  return pairs
 }
 
 function splitFlags(flags, mode) {
@@ -172,7 +229,10 @@ async function download(url, path) {
   if (existsSync(path)) return
   const response = await fetch(url)
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`)
-  writeFileSync(path, Buffer.from(await response.arrayBuffer()))
+  // Streamed to disk (the English dump is 0.5 GB), then renamed, so a broken
+  // download never passes for a whole one on the next run.
+  await pipeline(Readable.fromWeb(response.body), createWriteStream(path + '.part'))
+  renameSync(path + '.part', path)
 }
 
 async function readLines(path) {
@@ -186,6 +246,7 @@ async function main() {
   const work = root + 'build/dictionary/'
   mkdirSync(work, { recursive: true })
   await download(SOURCES.wiktionary, work + 'lithuanian.jsonl')
+  await download(SOURCES.english, work + 'english.jsonl.gz')
   await download(SOURCES.dic, work + 'lt.dic')
   await download(SOURCES.aff, work + 'lt.aff')
   await download(SOURCES.copying, work + 'COPYING')
@@ -198,6 +259,8 @@ async function main() {
   const negatable = new Set()
   const forms = expandHunspell(readFileSync(work + 'lt.dic', 'utf8'), affixes, negatable)
   const ranks = readFrequency(readFileSync(work + 'lt_50k.txt', 'utf8'))
+  const translated = addTranslated(lemmas, await readTranslations(work + 'english.jsonl.gz'), new Set(forms.keys()))
+  console.log(`${translated} lemmas from English translation tables`)
   const out = writeDictionary(lemmas, forms, negatable, ranks)
 
   const target = root + 'Shared (Extension)/Resources/dictionary/'

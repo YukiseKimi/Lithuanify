@@ -149,3 +149,22 @@ h1 {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
 }
+
+.known {
+    margin-top: 28px;
+}
+
+h2 {
+    margin: 0 0 4px;
+    font-size: 17px;
+}
+
+.note {
+    margin: 0 0 10px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+#known-list li {
+    align-items: center;
+}

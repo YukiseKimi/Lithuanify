@@ -21,6 +21,17 @@
         <span class="row-label" data-i18n="popup_ai">On-device AI</span>
     </label>
 
+    <label class="toggle google-row">
+        <input type="checkbox" id="google">
+        <span class="track"><span class="thumb"></span></span>
+        <span class="row-label" data-i18n="popup_google">Google Translate</span>
+    </label>
+    <p id="google-needs-ai" class="hint" data-i18n="popup_google_needs_ai" hidden>Google Translate needs the on-device AI: it gives the AI an English sentence to read.</p>
+    <div id="google-details" class="google-details" hidden>
+        <p class="hint" data-i18n="popup_google_note">Sends each paragraph the on-device AI glosses to Google, so the AI can pick better meanings. Needs the on-device AI and your own Cloud Translation API key.</p>
+        <input id="google-key" class="google-key" type="password" autocomplete="off" spellcheck="false" placeholder="Cloud Translation API key" aria-label="Cloud Translation API key">
+    </div>
+
     <label class="mode-row">
         <span class="row-label" data-i18n="popup_translate">Translate</span>
         <select id="mode">
@@ -45,6 +56,6 @@
 
     <p class="credits"><span data-i18n="popup_credits">Dictionary: Wiktionary (CC BY-SA 4.0), the Hunspell lt_LT word list and FrequencyWords (CC BY-SA 4.0).</span> <a href="https://kaikki.org/dictionary/Lithuanian/" target="_blank" rel="noopener" data-i18n="popup_credits_link">Sources</a></p>
 
-    <p class="hint" data-i18n="popup_hint">Translations appear in small letters above recognised Lithuanian words. Choose whether to translate the whole page, only the paragraph you rest the pointer on, or only text you highlight. On-device AI uses Apple Intelligence for context-aware meanings — private and free. Dictionary meanings appear instantly; the AI fills in the rest. Nothing leaves your device.</p>
+    <p class="hint" data-i18n="popup_hint">Translations appear in small letters above recognised Lithuanian words. Choose whether to translate the whole page, only the paragraph you rest the pointer on, or only text you highlight. On-device AI uses Apple Intelligence for context-aware meanings — private and free. Dictionary meanings appear instantly; the AI fills in the rest. Nothing leaves your device unless you turn on Google Translate.</p>
 </body>
 </html>
