@@ -67,9 +67,35 @@ export async function loadContent(html, { hideCommon = 0, mode = 'page', modelAv
   }
   const stored = { mode, hideCommon }
   const storageListeners = []
+  // storage.local as Safari gives it: keyed reads, and a change event in every tab.
+  const notify = (changes) => storageListeners.forEach((listener) => listener(plain(changes), 'local'))
+  const pick = (keys) => {
+    if (keys === null || keys === undefined) return plain(stored)
+    const wanted = Array.isArray(keys) ? keys : [keys]
+    return plain(Object.fromEntries(wanted.filter((k) => k in stored).map((k) => [k, stored[k]])))
+  }
   window.browser = {
     storage: {
-      local: { get: async () => ({ ...stored }), set: async () => {} },
+      local: {
+        get: async (keys) => pick(keys),
+        set: async (values) => {
+          const changes = {}
+          for (const [key, newValue] of Object.entries(values)) {
+            changes[key] = { oldValue: stored[key], newValue }
+            stored[key] = plain(newValue)
+          }
+          notify(changes)
+        },
+        remove: async (keys) => {
+          const changes = {}
+          for (const key of [].concat(keys)) {
+            if (!(key in stored)) continue
+            changes[key] = { oldValue: stored[key] }
+            delete stored[key]
+          }
+          notify(changes)
+        }
+      },
       onChanged: { addListener: (listener) => storageListeners.push(listener) }
     },
     runtime: {
@@ -84,7 +110,7 @@ export async function loadContent(html, { hideCommon = 0, mode = 'page', modelAv
               m: [].concat(dictionary[w].m || dictionary[w]),
               l: dictionary[w].l || null,
               r: dictionary[w].r || 0,
-              ...(dictionary[w].approx ? { approx: true } : {})
+              ...(dictionary[w].approx ? { approx: true, from: dictionary[w].from || null } : {})
             }]))
         }
         if (message.command === 'gloss') {
@@ -117,6 +143,37 @@ export async function loadContent(html, { hideCommon = 0, mode = 'page', modelAv
       }
       storageListeners.forEach((listener) => listener(changes, 'local'))
     },
+    // Taps the gloss over the n-th ruby whose word is `word`; returns the click event.
+    tapGloss: (word, n = 0) => {
+      const ruby = [...window.document.querySelectorAll('ruby')].filter((r) => r.firstChild.textContent === word)[n]
+      const event = new window.MouseEvent('click', { bubbles: true, cancelable: true })
+      ruby.lastChild.dispatchEvent(event)
+      return event
+    },
+    // What the open word card shows, or null when no card is open.
+    card: () => {
+      const host = window.document.getElementById('lithuanify-card')
+      const root = host && host.shadowRoot
+      if (!root || host.hidden) return null
+      const text = (selector) => { const el = root.querySelector(selector); return el ? el.textContent : null }
+      return plain({
+        word: text('.word'),
+        form: text('.form'),
+        rank: text('.rank'),
+        meanings: [...root.querySelectorAll('.meanings li')].map((li) => li.textContent),
+        shown: text('.meanings li.shown'),
+        source: text('.source'),
+        save: text('button.save'),
+        link: root.querySelector('a.wiki') ? root.querySelector('a.wiki').href : null
+      })
+    },
+    // Presses Save on the open card, and waits for storage to answer.
+    pressSave: async () => {
+      const button = window.document.getElementById('lithuanify-card').shadowRoot.querySelector('button.save')
+      button.dispatchEvent(new window.MouseEvent('click', { bubbles: true, composed: true }))
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    },
+    stored: (key) => (key in stored ? plain(stored[key]) : undefined),
     scrollTo: (selector) => {
       const el = window.document.querySelector(selector)
       for (const observer of observers) {

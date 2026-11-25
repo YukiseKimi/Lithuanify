@@ -350,7 +350,8 @@ function prefixedMeaning(meanings, word) {
     for (const prefix of VERB_PREFIXES) {
         if (!word.startsWith(prefix) || word.length < prefix.length + MIN_STEM) continue;
         const base = entryOf(meanings, word.slice(prefix.length));
-        if (base && base.ne) return { m: base.m, l: base.l && prefix + base.l, r: 0, approx: true };
+        // `from` names the plain verb, for the word card: "the meaning of važiuoti".
+        if (base && base.ne) return { m: base.m, l: base.l && prefix + base.l, r: 0, approx: true, from: base.l };
     }
     return null;
 }

@@ -272,3 +272,165 @@ test('an approximate meaning shows at once and goes to the model with its lemma 
   await page.settle()
   assert.deepEqual(page.glosses(), [['Jis', 'he'], ['išvažiuoja', 'leaves']])
 })
+
+test('a tap on a gloss opens a card with the word, its lemma and every meaning, the shown one marked', async () => {
+  const page = await loadContent(lt('<p>Lietuvos šalies miestas.</p>'), {
+    dictionary: { šalies: { m: ['land', 'country', 'aside'], l: 'šalis' } }, modelAvailable: false
+  })
+  await page.settle()
+  assert.equal(page.card(), null)
+
+  page.tapGloss('šalies')
+  const card = page.card()
+  assert.equal(card.word, 'šalies')
+  assert.equal(card.form, 'form of šalis')
+  assert.deepEqual(card.meanings, ['land', 'country', 'aside'])
+  assert.equal(card.shown, 'land')
+})
+
+test('a tap on a gloss inside a link opens the card and does not follow the link', async () => {
+  const page = await loadContent(lt('<p><a href="https://example.lt/knyga">Aš skaitau knygą</a></p>'), { modelAvailable: false })
+  await page.settle()
+  const event = page.tapGloss('knygą')
+  assert.equal(event.defaultPrevented, true)
+  assert.equal(page.card().word, 'knygą')
+})
+
+test('the card of a common word shows how common it is', async () => {
+  const page = await loadContent(lt('<p>Aš skaitau knygą.</p>'), {
+    dictionary: { aš: { m: ['I'], r: 3 }, knygą: { m: ['book'], l: 'knyga', r: 1200 } }, modelAvailable: false
+  })
+  await page.settle()
+  page.tapGloss('Aš')
+  assert.equal(page.card().rank, 'Top 500')
+  page.tapGloss('knygą')
+  assert.equal(page.card().rank, 'Top 2,000')
+})
+
+test('a word the dictionary does not know shows the meaning in its gloss on its card', async () => {
+  const page = await loadContent(lt('<p>Aš skaitau.</p>'))
+  await page.settle()
+  page.tapGloss('skaitau')
+  const card = page.card()
+  assert.equal(card.word, 'skaitau')
+  assert.equal(card.form, null)
+  assert.deepEqual(card.meanings, ['G:skaitau'])
+  assert.equal(card.shown, 'G:skaitau')
+})
+
+test('the card says where the meaning in the gloss came from', async () => {
+  let answer
+  const reply = new Promise((resolve) => { answer = resolve })
+  const page = await loadContent(lt('<p>Jis išvažiuoja į Kauną. Kasa uždaryta, sostinė graži.</p>'), {
+    dictionary: {
+      išvažiuoja: { m: ['go by vehicle'], l: 'išvažiuoti', approx: true, from: 'važiuoti' },
+      kasa: ['cash register', 'braid'],
+      sostinė: { m: ['capital'], l: 'sostinė' }
+    },
+    gloss: () => reply
+  })
+  await waitFor(() => page.glossCalls() === 1)
+  page.tapGloss('sostinė')
+  assert.equal(page.card().source, 'Dictionary')
+  page.tapGloss('išvažiuoja')
+  assert.equal(page.card().source, 'Approximate: the meaning of važiuoti')
+
+  answer([{ jis: 'he', išvažiuoja: 'leaves', kauną: 'Kaunas', kasa: 'braid', uždaryta: 'closed', graži: 'beautiful' }])
+  await page.settle()
+  page.tapGloss('Kasa')
+  assert.equal(page.card().source, 'On-device AI picked meaning 2')
+  page.tapGloss('išvažiuoja')
+  assert.equal(page.card().source, 'On-device AI meaning')
+  page.tapGloss('uždaryta')
+  assert.equal(page.card().source, 'On-device AI meaning')
+})
+
+test('Escape, a tap outside the card, a scroll and turning Lithuanify off each close the card', async () => {
+  const page = await loadContent(lt('<p id="p">Aš skaitau knygą.</p>'), { modelAvailable: false })
+  await page.settle()
+  const { window, document } = page
+
+  page.tapGloss('knygą')
+  document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  assert.equal(page.card(), null)
+
+  page.tapGloss('knygą')
+  const inside = document.getElementById('lithuanify-card').shadowRoot.querySelector('.meanings li')
+  inside.dispatchEvent(new window.MouseEvent('click', { bubbles: true, composed: true }))
+  assert.equal(page.card().word, 'knygą')
+  document.getElementById('p').dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+  assert.equal(page.card(), null)
+
+  page.tapGloss('knygą')
+  document.dispatchEvent(new window.Event('scroll'))
+  assert.equal(page.card(), null)
+
+  page.tapGloss('Aš')
+  assert.equal(page.card().word, 'Aš')
+  page.changeSettings({ enabled: false })
+  await waitFor(() => page.card() === null)
+})
+
+test('the card links the lemma, or else the word, to the Lithuanian entry on Wiktionary', async () => {
+  const page = await loadContent(lt('<p>Lietuvos šalies žmonės.</p>'), {
+    dictionary: { šalies: { m: ['land', 'country'], l: 'šalis' } }
+  })
+  await page.settle()
+  page.tapGloss('šalies')
+  assert.equal(page.card().link, 'https://en.wiktionary.org/wiki/%C5%A1alis#Lithuanian')
+  page.tapGloss('žmonės')
+  assert.equal(page.card().link, 'https://en.wiktionary.org/wiki/%C5%BEmon%C4%97s#Lithuanian')
+})
+
+test('Save on the card keeps the word with its lemma, meanings and sentence, and a second tap removes it', async () => {
+  const page = await loadContent(lt('<p>Vilnius yra didelis. Lietuvos šalies miestas yra gražus!</p>'), {
+    dictionary: { šalies: { m: ['land', 'country'], l: 'šalis' } }, modelAvailable: false
+  })
+  await page.settle()
+  page.tapGloss('šalies')
+  assert.equal(page.card().save, '☆ Save')
+
+  await page.pressSave()
+  assert.equal(page.card().save, '★ Saved')
+  const saved = page.stored('saved:šalis')
+  assert.ok(saved.savedAt > 0)
+  delete saved.savedAt
+  assert.deepEqual(saved, {
+    word: 'šalies', lemma: 'šalis', meanings: ['land', 'country'], shown: 'land',
+    sentence: 'Lietuvos šalies miestas yra gražus!'
+  })
+
+  await page.pressSave()
+  assert.equal(page.card().save, '☆ Save')
+  assert.equal(page.stored('saved:šalis'), undefined)
+})
+
+test('two forms of one lemma make one saved entry, with the newest sentence', async () => {
+  const page = await loadContent(lt('<p>Jis kuria namą.</p><p>Jis kūrė dainą.</p>'), {
+    dictionary: { kuria: { m: ['create'], l: 'kurti' }, kūrė: { m: ['create'], l: 'kurti' } }, modelAvailable: false
+  })
+  await page.settle()
+  page.tapGloss('kuria')
+  await page.pressSave()
+  page.tapGloss('kūrė')
+  await page.pressSave()
+  assert.equal(page.stored('saved:kurti'), undefined)
+  await page.pressSave()
+  assert.equal(page.stored('saved:kurti').sentence, 'Jis kūrė dainą.')
+})
+
+test('the card shows a saved word as saved, and follows a save or a removal in another tab', async () => {
+  const page = await loadContent(lt('<p>Jis kuria namą. Jis kūrė dainą.</p>'), {
+    dictionary: { kuria: { m: ['create'], l: 'kurti' }, kūrė: { m: ['create'], l: 'kurti' } }, modelAvailable: false
+  })
+  await page.settle()
+  page.tapGloss('kuria')
+  await page.pressSave()
+  page.tapGloss('kūrė')
+  await waitFor(() => page.card().save === '★ Saved')
+
+  page.changeSettings({ 'saved:kurti': undefined })
+  await waitFor(() => page.card().save === '☆ Save')
+  page.changeSettings({ 'saved:kurti': { word: 'kuria', lemma: 'kurti', meanings: ['create'], shown: 'create', sentence: 'Jis kuria namą.', savedAt: 1 } })
+  await waitFor(() => page.card().save === '★ Saved')
+})

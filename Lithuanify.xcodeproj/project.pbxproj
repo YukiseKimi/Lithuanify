@@ -109,6 +109,9 @@
 				Resources/popup.css,
 				Resources/popup.html,
 				Resources/popup.js,
+				Resources/saved.css,
+				Resources/saved.html,
+				Resources/saved.js,
 				SafariWebExtensionHandler.swift,
 			);
 			target = 501759A32FD8155200559D08 /* Lithuanify Extension (iOS) */;
@@ -125,6 +128,9 @@
 				Resources/popup.css,
 				Resources/popup.html,
 				Resources/popup.js,
+				Resources/saved.css,
+				Resources/saved.html,
+				Resources/saved.js,
 				SafariWebExtensionHandler.swift,
 			);
 			target = 501759AD2FD8155200559D08 /* Lithuanify Extension (macOS) */;

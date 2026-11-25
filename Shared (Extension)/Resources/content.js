@@ -24,6 +24,7 @@ ruby.lithuanify-ruby > rt {
     letter-spacing: 0;
     padding: 0 0.2em 1px;
     user-select: none;
+    cursor: pointer;  /* also lets iOS Safari send a tap on it to the page's click listener */
 }
 @supports (color: color-mix(in srgb, red, blue)) {
     ruby.lithuanify-ruby > rt {
@@ -64,6 +65,8 @@ let generation = 0;          // bumped on disable, so in-flight work is dropped
 // Text nodes Lithuanify split off itself. They are never re-scanned.
 let ownNodes = new WeakSet();
 let contextOf = new WeakMap();
+// What the word card shows for each gloss: ruby -> GlossInfo (see glossInfoFor).
+let glossInfo = new WeakMap();
 
 
 function isWordToken(token) {
@@ -162,13 +165,29 @@ function aiActive() {
 
 // --- Rendering --------------------------------------------------------------
 
-function makeRuby(token, gloss) {
+// The facts behind one gloss. `source` says where the gloss's meaning came
+// from: the dictionary's first meaning, an approximate one (a prefixed verb
+// read as its plain verb), or the on-device model.
+function glossInfoFor(token, gloss, context) {
+    const entry = entryFor(token);
+    const fromDictionary = !!entry && entry.m[0] === gloss;
+    return {
+        word: token,
+        lower: token.toLowerCase(),
+        entry,
+        context,
+        source: fromDictionary ? (entry.approx ? "approximate" : "dictionary") : "model"
+    };
+}
+
+function makeRuby(token, gloss, info) {
     const ruby = document.createElement("ruby");
     ruby.className = ANNOTATION_CLASS;
     ruby.appendChild(document.createTextNode(token));
     const rt = document.createElement("rt");
     rt.textContent = gloss;
     ruby.appendChild(rt);
+    glossInfo.set(ruby, info);
     return ruby;
 }
 
@@ -189,6 +208,7 @@ function isName(tokens, i) {
 function splitNode(node, tokens, glosses, picks = new Set()) {
     const fragment = document.createDocumentFragment();
     const candidates = [];
+    const context = contextOf.get(node) || node.nodeValue;
     let run = "";
     const flushRun = () => {
         if (!run) return;
@@ -201,15 +221,15 @@ function splitNode(node, tokens, glosses, picks = new Set()) {
         const gloss = glosses[i];
         if (gloss) {
             flushRun();
-            const ruby = makeRuby(token, gloss);
+            const ruby = makeRuby(token, gloss, glossInfoFor(token, gloss, context));
             fragment.appendChild(ruby);
-            if (picks.has(token.toLowerCase())) candidates.push({ token, lower: token.toLowerCase(), el: ruby });
+            if (picks.has(token.toLowerCase())) candidates.push({ token, lower: token.toLowerCase(), el: ruby, context });
         } else if (isCandidate(token, gloss)) {
             flushRun();
             const t = document.createTextNode(token);
             ownNodes.add(t);
             fragment.appendChild(t);
-            candidates.push({ token, lower: token.toLowerCase(), el: t });
+            candidates.push({ token, lower: token.toLowerCase(), el: t, context });
         } else {
             run += token;
         }
@@ -268,8 +288,13 @@ function applyRefinement(record, glossMap) {
     for (const part of record.parts) {
         const gloss = glossMap[part.lower];
         if (!gloss || !part.el.parentNode) continue;
-        if (part.el.nodeName === "RUBY") part.el.lastChild.textContent = gloss;
-        else part.el.parentNode.replaceChild(makeRuby(part.token, gloss), part.el);
+        if (part.el.nodeName === "RUBY") {
+            part.el.lastChild.textContent = gloss;
+            glossInfo.set(part.el, { ...glossInfo.get(part.el), source: "model" });
+        } else {
+            part.el.parentNode.replaceChild(
+                makeRuby(part.token, gloss, { ...glossInfoFor(part.token, gloss, part.context), source: "model" }), part.el);
+        }
     }
 }
 
@@ -625,6 +650,239 @@ function removeAnnotations() {
     parents.forEach((p) => p.normalize());
     ownNodes = new WeakSet();
     contextOf = new WeakMap();
+    glossInfo = new WeakMap();
+}
+
+// --- Word card --------------------------------------------------------------
+// A tap on a gloss opens a card with the word, its lemma and every meaning.
+// The card lives in a shadow root on <html>: the page's CSS cannot reach it,
+// and the MutationObserver on <body> does not see it.
+
+const CARD_CSS = `
+:host { all: initial; position: fixed; z-index: 2147483647; }
+:host([hidden]) { display: none; }
+.card {
+    --bg: #ffffff; --fg: #1c1b19; --muted: #77726a; --line: #e6e1d6; --accent: #2f62c8; --foot: #f8f6f1; --saved: #b4541f;
+    width: max-content; min-width: 180px; max-width: min(300px, calc(100vw - 16px));
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--fg); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+@media (prefers-color-scheme: dark) {
+    .card { --bg: #26282c; --fg: #ecebe8; --muted: #a29e96; --line: #3a3d42; --accent: #8fb1ff; --foot: #2c2f34; --saved: #f0a070; }
+}
+.head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 9px 12px 7px; border-bottom: 1px solid var(--line); }
+.word { font-weight: 650; font-size: 15px; }
+.form { color: var(--muted); }
+.rank { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; }
+.save { margin-left: auto; font: 600 12px/1.4 inherit; color: var(--accent); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; cursor: pointer; }
+.save[aria-pressed="true"] { color: var(--saved); border-color: var(--saved); }
+.save:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.meanings { margin: 0; padding: 8px 12px 8px 30px; }
+.meanings li.shown { font-weight: 650; color: var(--accent); }
+.foot { display: flex; justify-content: space-between; gap: 12px; padding: 7px 12px; border-top: 1px solid var(--line); background: var(--foot); border-radius: 0 0 10px 10px; color: var(--muted); font-size: 11px; }
+.foot:empty { display: none; }
+.foot a { color: var(--accent); text-decoration: none; }`;
+
+const CARD_GAP = 6;
+const CARD_MARGIN = 8;
+let cardHost = null;
+
+function cardElement() {
+    if (!cardHost) {
+        cardHost = document.createElement("div");
+        cardHost.id = "lithuanify-card";
+        const root = cardHost.attachShadow({ mode: "open" });
+        const style = document.createElement("style");
+        style.textContent = CARD_CSS;
+        const card = document.createElement("div");
+        card.className = "card";
+        root.append(style, card);
+    }
+    if (!cardHost.isConnected) document.documentElement.appendChild(cardHost);
+    return cardHost.shadowRoot.querySelector(".card");
+}
+
+function element(tag, className, text) {
+    const el = document.createElement(tag);
+    if (className) el.className = className;
+    if (text !== undefined) el.textContent = text;
+    return el;
+}
+
+// The badge for a word among the 500 or 2,000 most common (the popup's steps).
+function rankLabel(entry) {
+    if (!entry || !entry.r) return null;
+    if (entry.r <= 500) return "Top 500";
+    if (entry.r <= 2000) return "Top 2,000";
+    return null;
+}
+
+// Where the meaning in the gloss came from, in the words the card shows.
+function sourceLine(info, shown) {
+    const entry = info.entry;
+    if (info.source === "model") {
+        const n = entry ? entry.m.indexOf(shown) + 1 : 0;
+        return n ? `On-device AI picked meaning ${n}` : "On-device AI meaning";
+    }
+    if (info.source === "approximate") {
+        return entry && entry.from ? `Approximate: the meaning of ${entry.from}` : "Approximate meaning";
+    }
+    return "Dictionary";
+}
+
+// The Lithuanian section of the English Wiktionary: the lemma's page, or the
+// word's own when there is no lemma (a meaning from the on-device model).
+function wiktionaryUrl(info) {
+    const word = (info.entry && info.entry.l) || info.lower;
+    return `https://en.wiktionary.org/wiki/${encodeURIComponent(word)}#Lithuanian`;
+}
+
+// --- Saved words ---
+// One storage.local key for each lemma ("saved:kurti"), so two tabs that save
+// different words never write the same record.
+
+const SENTENCE_RE = /[^.!?;\n]+[.!?;\n]*/g;
+
+// The sentence of `text` that holds `word`, or the whole text.
+function sentenceOf(text, word) {
+    const sentences = text.match(SENTENCE_RE) || [text];
+    const found = sentences.find((sentence) =>
+        (sentence.toLowerCase().match(/\p{L}+/gu) || []).includes(word));
+    return (found || text).trim();
+}
+
+function savedKey(info) {
+    return "saved:" + ((info.entry && info.entry.l) || info.lower);
+}
+
+function savedWordFrom(info, shown) {
+    const entry = info.entry;
+    return {
+        word: info.lower,
+        lemma: entry ? entry.l : null,
+        meanings: entry ? [...entry.m] : [shown],
+        shown,
+        sentence: sentenceOf(info.context, info.lower),
+        savedAt: Date.now()
+    };
+}
+
+// Saves the word, or removes it when it is saved. Resolves to the new state.
+async function toggleSaved(info, shown) {
+    const key = savedKey(info);
+    const stored = await browser.storage.local.get(key);
+    if (stored[key]) {
+        await browser.storage.local.remove(key);
+        return false;
+    }
+    await browser.storage.local.set({ [key]: savedWordFrom(info, shown) });
+    return true;
+}
+
+function showSaved(button, saved) {
+    button.textContent = saved ? "★ Saved" : "☆ Save";
+    button.setAttribute("aria-pressed", String(saved));
+}
+
+function openCard(ruby, info) {
+    const shown = ruby.lastChild.textContent;
+    const entry = info.entry;
+    const card = cardElement();
+
+    const head = element("div", "head");
+    head.append(element("span", "word", info.word));
+    if (entry && entry.l && entry.l !== info.lower) head.append(element("span", "form", `form of ${entry.l}`));
+    const rank = rankLabel(entry);
+    if (rank) head.append(element("span", "rank", rank));
+    const save = element("button", "save");
+    save.type = "button";
+    showSaved(save, false);
+    save.addEventListener("click", async () => {
+        try {
+            showSaved(save, await toggleSaved(info, shown));
+        } catch (e) {
+            save.textContent = "Not saved";
+        }
+    });
+    head.append(save);
+    const key = savedKey(info);
+    openSaved = { key, button: save };
+    browser.storage.local.get(key).then((stored) => {
+        if (openSaved && openSaved.button === save) showSaved(save, !!stored[key]);
+    }, () => {});
+
+    const meanings = entry ? [...entry.m] : [];
+    if (!meanings.includes(shown)) meanings.unshift(shown);
+    const list = element("ol", "meanings");
+    for (const meaning of meanings) list.append(element("li", meaning === shown ? "shown" : "", meaning));
+
+    const foot = element("div", "foot");
+    const wiki = element("a", "wiki", "Wiktionary ↗");
+    wiki.href = wiktionaryUrl(info);
+    wiki.target = "_blank";
+    wiki.rel = "noopener noreferrer";
+    foot.append(element("span", "source", sourceLine(info, shown)), wiki);
+
+    card.replaceChildren(head, list, foot);
+    cardHost.hidden = false;
+    placeCard(ruby.lastChild);
+    document.addEventListener("keydown", onCardKey, true);
+    document.addEventListener("scroll", closeCard, true);
+}
+
+// One card at most is open. It is placed for one spot on the screen, so any
+// scroll, anywhere on the page, closes it.
+function closeCard() {
+    document.removeEventListener("keydown", onCardKey, true);
+    document.removeEventListener("scroll", closeCard, true);
+    openSaved = null;
+    if (cardHost) cardHost.hidden = true;
+}
+
+// The open card's saved-word key and its button, so that a save or a removal
+// in another tab (or another card) shows on it at once.
+let openSaved = null;
+
+browser.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !openSaved || !(openSaved.key in changes)) return;
+    showSaved(openSaved.button, !!changes[openSaved.key].newValue);
+});
+
+function onCardKey(event) {
+    if (event.key === "Escape") closeCard();
+}
+
+const isCardOpen = () => !!cardHost && cardHost.isConnected && !cardHost.hidden;
+
+// Below the gloss, or above it when there is no room below; always on screen.
+function placeCard(anchor) {
+    const at = anchor.getBoundingClientRect();
+    const box = cardHost.shadowRoot.querySelector(".card").getBoundingClientRect();
+    const width = window.innerWidth || document.documentElement.clientWidth;
+    const height = window.innerHeight || document.documentElement.clientHeight;
+    const left = Math.max(CARD_MARGIN, Math.min(at.left, width - box.width - CARD_MARGIN));
+    let top = at.bottom + CARD_GAP;
+    if (top + box.height > height - CARD_MARGIN && at.top - CARD_GAP - box.height >= CARD_MARGIN) {
+        top = at.top - CARD_GAP - box.height;
+    }
+    cardHost.style.left = `${Math.round(left)}px`;
+    cardHost.style.top = `${Math.round(top)}px`;
+}
+
+function onGlossTap(event) {
+    const rt = event.target instanceof Element ? event.target.closest(`ruby.${ANNOTATION_CLASS} > rt`) : null;
+    const info = rt && glossInfo.get(rt.parentElement);
+    if (!info) {
+        // A tap anywhere but on the card or a gloss closes the card.
+        if (isCardOpen() && !event.composedPath().includes(cardHost)) closeCard();
+        return;
+    }
+    // The gloss opens its card; a gloss inside a link does not follow the link.
+    event.preventDefault();
+    event.stopPropagation();
+    openCard(rt.parentElement, info);
 }
 
 // Heuristic: is this page (mostly) Lithuanian? Non-Lithuanian pages are left
@@ -874,6 +1132,7 @@ async function enable() {
 
 async function start() {
     injectStyles();
+    document.addEventListener("click", onGlossTap, true);
     const gen = generation;
     if (smartEnabled) {
         try {
@@ -900,6 +1159,8 @@ function disable() {
     stopWatchingLanguage();
     stopObserver();
     stopOnDemand();
+    document.removeEventListener("click", onGlossTap, true);
+    closeCard();
     if (viewportObserver) {
         viewportObserver.disconnect();
         viewportObserver = null;

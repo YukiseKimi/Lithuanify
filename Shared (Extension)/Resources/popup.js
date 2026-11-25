@@ -57,3 +57,17 @@ hideCommon.addEventListener("change", () => {
 smart.addEventListener("change", () => {
     browser.storage.local.set({ smart: smart.checked });
 });
+
+// The Saved words page, with the number of saved words (one "saved:" key each).
+const savedLink = document.getElementById("saved-link");
+
+browser.storage.local.get(null).then((stored) => {
+    const n = Object.keys(stored).filter((key) => key.startsWith("saved:") && stored[key]).length;
+    savedLink.textContent = `${t("popup_saved", "Saved words")} (${n})`;
+}).catch(() => { /* keep the plain label */ });
+
+savedLink.addEventListener("click", (event) => {
+    event.preventDefault();
+    browser.tabs.create({ url: browser.runtime.getURL("saved.html") });
+    window.close();
+});
